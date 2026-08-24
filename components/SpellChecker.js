@@ -160,6 +160,13 @@ export default class SpellChecker {
       'tsconfig', 'jsconfig', 'postcss', 'tailwindcss',
       'node_modules', 'package', 'lockfile',
     ]);
+
+    // Small words that should stay lowercase in titles (unless first/last word)
+    this.lowercaseWords = new Set([
+      'a', 'an', 'the', 'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
+      'in', 'on', 'at', 'to', 'by', 'of', 'up', 'as', 'is', 'it',
+      'if', 'no', 'not', 'with', 'from', 'into', 'over', 'upon',
+    ]);
   }
 
   scanStructure(node, path = []) {
@@ -241,19 +248,21 @@ export default class SpellChecker {
 
     // 2. NAMING CONVENTION CHECKS
 
-
-    // Check for special characters (excluding . - _ and path separators)
-    if (/[^a-zA-Z0-9._\-\s]/.test(name)) {
-      const cleaned = name.replace(/[^a-zA-Z0-9._\-]/g, '-').replace(/-{2,}/g, '-');
-      issues.push({
-        id: ++this.issueId,
-        path,
-        original: name,
-        message: 'Contains special characters that may cause issues',
-        suggestion: cleaned,
-        severity: 'error',
-        category: 'Convention'
-      });
+    // Capitalisation check — each word should start with uppercase
+    // Skip dotfiles, technical names, and files with extensions
+    if (isFolder && !name.startsWith('.')) {
+      const capitalised = this._capitaliseWords(name);
+      if (capitalised !== name) {
+        issues.push({
+          id: ++this.issueId,
+          path,
+          original: name,
+          message: 'Words should be capitalised',
+          suggestion: capitalised,
+          severity: 'info',
+          category: 'Convention'
+        });
+      }
     }
 
     // Check for mixed naming conventions (camelCase mixed with kebab-case or snake_case)
@@ -321,27 +330,6 @@ export default class SpellChecker {
       });
     }
 
-    // Check for uppercase folder names (convention: folders usually lowercase)
-    if (isFolder && /[A-Z]/.test(name) && !name.startsWith('.')) {
-      // Skip common PascalCase component folders
-      const pascalExceptions = ['Components', 'Pages', 'Views', 'Models', 'Services',
-        'Hooks', 'Utils', 'Helpers', 'Types', 'Interfaces', 'Constants', 'Assets'];
-      if (!pascalExceptions.includes(name)) {
-        const lower = name.toLowerCase();
-        if (lower !== name) {
-          issues.push({
-            id: ++this.issueId,
-            path,
-            original: name,
-            message: 'Folder names are typically lowercase',
-            suggestion: lower,
-            severity: 'info',
-            category: 'Convention'
-          });
-        }
-      }
-    }
-
     // Check for consecutive hyphens or underscores
     if (/[-]{2,}|[_]{2,}/.test(name)) {
       const fixed = name.replace(/-{2,}/g, '-').replace(/_{2,}/g, '_');
@@ -357,6 +345,40 @@ export default class SpellChecker {
     }
 
     return issues;
+  }
+
+  _capitaliseWords(name) {
+    // Split by spaces, hyphens, and underscores while preserving the separators
+    const parts = name.split(/(\s+|-|_)/);
+
+    const capitalised = parts.map((part, index) => {
+      // Preserve separators as-is
+      if (/^(\s+|-|_)$/.test(part)) return part;
+
+      // Skip empty parts
+      if (part.length === 0) return part;
+
+      // Skip numbers
+      if (/^\d+$/.test(part)) return part;
+
+      // Skip known technical terms (keep them as-is)
+      if (this.knownTerms.has(part.toLowerCase())) return part;
+
+      // Find the actual word positions (first and last non-separator)
+      const wordParts = parts.filter(p => !/^(\s+|-|_)$/.test(p) && p.length > 0);
+      const isFirst = wordParts[0] === part && index <= 1;
+      const isLast = wordParts[wordParts.length - 1] === part;
+
+      // Small words stay lowercase unless first or last
+      if (!isFirst && !isLast && this.lowercaseWords.has(part.toLowerCase())) {
+        return part.toLowerCase();
+      }
+
+      // Capitalise first letter
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    });
+
+    return capitalised.join('');
   }
 
   _extractWords(name) {
