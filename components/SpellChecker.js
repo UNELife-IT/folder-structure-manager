@@ -2,7 +2,7 @@ export default class SpellChecker {
   constructor() {
     this.issueId = 0;
 
-    // Common misspellings dictionary (comprehensive — 500+)
+    // Common misspellings dictionary (comprehensive — 700+)
     this.misspellings = {
       // A
       'abandonned': 'abandoned', 'aberation': 'aberration', 'abilty': 'ability',
@@ -185,6 +185,7 @@ export default class SpellChecker {
       'heirarchy': 'hierarchy', 'hiearchy': 'hierarchy', 'hierachy': 'hierarchy',
       'heigth': 'height', 'hieght': 'height', 'helpfull': 'helpful',
       'hightlight': 'highlight', 'highligth': 'highlight', 'historicly': 'historically',
+      'hogspitality': 'hospitality', 'hosptiality': 'hospitality', 'hosptality': 'hospitality',
       'horizonal': 'horizontal', 'howver': 'however', 'hygeine': 'hygiene',
       'hypethetical': 'hypothetical',
 
@@ -196,7 +197,7 @@ export default class SpellChecker {
       'implementaion': 'implementation', 'impliment': 'implement',
       'importent': 'important', 'imposible': 'impossible', 'improvment': 'improvement',
       'inaccurate': 'inaccurate', 'incidently': 'incidentally',
-      'inclued': 'include', 'inclued': 'include', 'incorect': 'incorrect',
+      'inclued': 'include', 'incorect': 'incorrect',
       'increse': 'increase', 'independant': 'independent', 'independantly': 'independently',
       'indespensable': 'indispensable', 'indispensible': 'indispensable',
       'indivdual': 'individual', 'indvidual': 'individual',
@@ -349,8 +350,9 @@ export default class SpellChecker {
       'somthing': 'something', 'somethign': 'something', 'sorce': 'source',
       'soure': 'source', 'speach': 'speech', 'specfic': 'specific',
       'specificaly': 'specifically', 'specifiy': 'specify', 'standart': 'standard',
-      'statment': 'statement', 'statment': 'statement', 'stragety': 'strategy',
-      'straegy': 'strategy', 'strenght': 'strength', 'strenth': 'strength',
+      'statment': 'statement', 'stratagy': 'strategy', 'stragety': 'strategy',
+      'straegy': 'strategy', 'stratergy': 'strategy', 'stradegy': 'strategy',
+      'strenght': 'strength', 'strenth': 'strength',
       'strucutre': 'structure', 'sturcture': 'structure', 'struture': 'structure',
       'subcribe': 'subscribe', 'submision': 'submission', 'subscrition': 'subscription',
       'substancial': 'substantial', 'succesful': 'successful',
@@ -503,11 +505,7 @@ export default class SpellChecker {
       'oauth2', 'saml', 'ldap', 'sso', 'mfa', 'totp', 'otp',
       'cidr', 'vpc', 'subnet', 'nat', 'vpn', 'ipsec',
       'cpu', 'gpu', 'ram', 'ssd', 'hdd', 'nvme', 'bios', 'uefi',
-      'api', 'sdk', 'cli', 'gui', 'tui', 'ide', 'repl',
-      'csv', 'tsv', 'xlsx', 'pdf', 'docx', 'pptx',
-      'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif',
-      'mp3', 'mp4', 'wav', 'ogg', 'flac', 'webm',
-      'woff', 'woff2', 'ttf', 'otf', 'eot',
+      'sdk', 'cli', 'gui', 'tui', 'ide', 'repl',
       'gzip', 'brotli', 'zstd', 'lz4', 'snappy',
       'protobuf', 'msgpack', 'avro', 'parquet',
       'kafka', 'rabbitmq', 'nats', 'mqtt', 'amqp',
@@ -524,30 +522,30 @@ export default class SpellChecker {
       'pytorch', 'tensorflow', 'numpy', 'pandas', 'scipy',
       'openai', 'anthropic', 'langchain', 'llamaindex',
       'wasm', 'webgl', 'webgpu', 'webrtc', 'webxr',
-      'pwa', 'amp', 'rss', 'atom', 'opml',
-      'smtp', 'imap', 'pop3', 'mime', 'dkim', 'spf', 'dmarc',
-      'oauth', 'oidc', 'pkce', 'jwks', 'jwe', 'jws',
-      'cors', 'csp', 'hsts', 'xss', 'csrf', 'sqli',
-      'cdn', 'waf', 'ddos', 'mitm', 'xsrf',
-      'semver', 'changelog', 'monorepo', 'polyrepo',
-      'kanban', 'scrum', 'agile', 'waterfall', 'devops', 'sre',
+      'rss', 'atom', 'opml',
+      'dkim', 'spf', 'dmarc',
+      'oidc', 'pkce', 'jwks', 'jwe', 'jws',
+      'csp', 'hsts', 'xss', 'sqli',
+      'waf', 'ddos', 'mitm', 'xsrf',
+      'semver', 'polyrepo',
+      'kanban', 'scrum', 'agile', 'waterfall', 'sre',
       'itil', 'itsm', 'cmdb', 'sla', 'slo', 'sli',
       'kpi', 'okr', 'roi', 'cto', 'ceo', 'cfo', 'coo', 'ciso',
       'saas', 'paas', 'iaas', 'faas', 'baas', 'dbaas',
       'etl', 'elt', 'olap', 'oltp', 'dwh',
       'erd', 'uml', 'bpmn', 'dfd',
-      'poc', 'mvp', 'mmp', 'ga', 'beta', 'alpha', 'rc',
-      'lts', 'eol', 'eos', 'ga',
+      'mmp', 'ga', 'beta', 'alpha', 'rc',
+      'lts', 'eol', 'eos',
       'iso', 'ieee', 'rfc', 'w3c', 'ietf', 'ecma',
       'gdpr', 'ccpa', 'hipaa', 'sox', 'pci', 'ferpa',
       'aria', 'wcag', 'vpat',
-      'svg', 'canvas', 'webgl',
+      'canvas',
       'ux', 'ui', 'hci', 'ia',
       'seo', 'sem', 'cro', 'cta', 'cpc', 'cpm', 'ctr',
       'crm', 'erp', 'hrm', 'hris', 'ats',
       'b2b', 'b2c', 'c2c', 'd2c',
-      'smtp', 'dns', 'dhcp', 'arp', 'icmp',
-      'tcp', 'udp', 'http', 'https', 'ftp', 'sftp', 'scp',
+      'dhcp', 'arp', 'icmp',
+      'sftp', 'scp',
       'nfs', 'smb', 'cifs', 'iscsi',
       'raid', 'lvm', 'zfs', 'btrfs', 'ext4', 'ntfs', 'apfs',
       'vm', 'vps', 'lxc', 'lxd', 'qemu', 'kvm', 'xen', 'hyperv',
@@ -556,7 +554,7 @@ export default class SpellChecker {
       'sns', 'sqs', 'kinesis', 'pubsub', 'eventbridge',
       's3', 'gcs', 'blob', 'r2', 'minio',
       'iam', 'rbac', 'abac', 'acl',
-      'ci', 'cd', 'gitops', 'argocd', 'flux',
+      'gitops', 'argocd', 'flux',
       'helm', 'kustomize', 'skaffold', 'tilt',
       'istio', 'envoy', 'linkerd', 'consul',
       'vault', 'keycloak', 'auth0', 'okta', 'cognito',
@@ -567,12 +565,28 @@ export default class SpellChecker {
       'wordpress', 'drupal', 'joomla', 'magento', 'shopify',
       'xogo', 'sharepoint', 'onedrive', 'onenote', 'outlook',
       'powerbi', 'powerautomate', 'powerapps',
+      // Acronyms that should be uppercase (handled by acronym check)
+      'it', 'hr', 'pcg', 'sop', 'sops',
+    ]);
+
+    // Acronyms that should always be fully uppercase
+    this.uppercaseAcronyms = new Set([
+      'it', 'hr', 'pcg', 'sop', 'sops', 'api', 'ui', 'ux', 'id', 'ids',
+      'url', 'urls', 'uri', 'uris', 'sql', 'css', 'html', 'xml', 'json',
+      'pdf', 'csv', 'faq', 'faqs', 'kpi', 'kpis', 'roi', 'roi',
+      'ceo', 'cfo', 'cto', 'coo', 'ciso', 'vp',
+      'sla', 'slas', 'slo', 'sli',
+      'crm', 'erp', 'hrm', 'hris',
+      'gdpr', 'ccpa', 'hipaa',
+      'dns', 'ssl', 'tls', 'ssh', 'ftp', 'tcp', 'udp', 'vpn',
+      'aws', 'gcp', 'cdn', 'cms',
+      'bcp', 'drp',
     ]);
 
     // Small words that should stay lowercase in titles (unless first/last word)
     this.lowercaseWords = new Set([
       'a', 'an', 'the', 'and', 'but', 'or', 'nor', 'for', 'yet', 'so',
-      'in', 'on', 'at', 'to', 'by', 'of', 'up', 'as', 'is', 'it',
+      'in', 'on', 'at', 'to', 'by', 'of', 'up', 'as', 'is',
       'if', 'no', 'not', 'with', 'from', 'into', 'over', 'upon',
     ]);
   }
@@ -654,21 +668,108 @@ export default class SpellChecker {
       }
     }
 
-    // 2. NAMING CONVENTION CHECKS
+    // 2. APOSTROPHE CHECK — detect incorrect possessive apostrophes in plurals/acronyms
+    const apostropheMatches = name.match(/\b([A-Za-z]+)'s\b/g);
+    if (apostropheMatches) {
+      for (const match of apostropheMatches) {
+        const baseWord = match.replace(/'s$/, '');
+        const lower = baseWord.toLowerCase();
+
+        // Check if it's an acronym being incorrectly pluralised with apostrophe
+        if (this.uppercaseAcronyms.has(lower) || /^[A-Z]{2,}$/.test(baseWord)) {
+          const fixedPlural = baseWord.toUpperCase() + 's';
+          const suggestion = name.replace(match, fixedPlural);
+          issues.push({
+            id: ++this.issueId,
+            path,
+            original: name,
+            message: `"${match}" — plural acronyms don't use apostrophes`,
+            suggestion,
+            severity: 'warning',
+            category: 'Grammar'
+          });
+        }
+
+        // Check common nouns that are often incorrectly given possessive apostrophes
+        // when they should be simple plurals (e.g., Cafe's → Cafes)
+        const pluralMistakes = {
+          "cafe's": 'Cafes', "cafes's": 'Cafes',
+          "photo's": 'Photos', "video's": 'Videos',
+          "memo's": 'Memos', "logo's": 'Logos',
+          "portfolio's": 'Portfolios', "scenario's": 'Scenarios',
+          "studio's": 'Studios', "ratio's": 'Ratios',
+          "zero's": 'Zeros', "hero's": 'Heroes',
+          "potato's": 'Potatoes', "tomato's": 'Tomatoes',
+          "volcano's": 'Volcanoes', "echo's": 'Echoes',
+          "piano's": 'Pianos', "radio's": 'Radios',
+          "criteria's": 'Criteria', "data's": 'Data',
+          "media's": 'Media', "agenda's": 'Agendas',
+          "formula's": 'Formulas', "antenna's": 'Antennas',
+        };
+
+        const matchLower = match.toLowerCase();
+        if (pluralMistakes[matchLower]) {
+          const suggestion = name.replace(match, pluralMistakes[matchLower]);
+          issues.push({
+            id: ++this.issueId,
+            path,
+            original: name,
+            message: `"${match}" — should be plural, not possessive`,
+            suggestion,
+            severity: 'warning',
+            category: 'Grammar'
+          });
+        }
+      }
+    }
+
+    // 3. ACRONYM CASE CHECK — known acronyms should be fully uppercase
+    for (const word of words) {
+      const lower = word.toLowerCase();
+      if (this.uppercaseAcronyms.has(lower) && word !== word.toUpperCase()) {
+        // Only flag if the word is clearly meant as an acronym (not part of a longer word)
+        if (word.length <= 5) {
+          const suggestion = name.replace(
+            new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`),
+            word.toUpperCase()
+          );
+          if (suggestion !== name) {
+            issues.push({
+              id: ++this.issueId,
+              path,
+              original: name,
+              message: `"${word}" should be uppercase "${word.toUpperCase()}"`,
+              suggestion,
+              severity: 'info',
+              category: 'Convention'
+            });
+          }
+        }
+      }
+    }
+
+    // 4. NAMING CONVENTION CHECKS
 
     // Capitalisation check for folders — each word should be capitalised
     if (isFolder && !name.startsWith('.')) {
       const capitalised = this._capitaliseWords(name);
       if (capitalised !== name) {
-        issues.push({
-          id: ++this.issueId,
-          path,
-          original: name,
-          message: 'Words should be capitalised',
-          suggestion: capitalised,
-          severity: 'info',
-          category: 'Convention'
-        });
+        // Don't flag if we already flagged an acronym issue for the same difference
+        const acronymIssue = issues.find(i =>
+          i.original === name && i.category === 'Convention' &&
+          i.message.includes('should be uppercase')
+        );
+        if (!acronymIssue || capitalised !== acronymIssue.suggestion) {
+          issues.push({
+            id: ++this.issueId,
+            path,
+            original: name,
+            message: 'Words should be capitalised',
+            suggestion: capitalised,
+            severity: 'info',
+            category: 'Convention'
+          });
+        }
       }
     }
 
@@ -805,6 +906,9 @@ export default class SpellChecker {
       // Skip known technical terms (keep them as-is)
       if (this.knownTerms.has(part.toLowerCase())) return part;
 
+      // If it's a known uppercase acronym, make it fully uppercase
+      if (this.uppercaseAcronyms.has(part.toLowerCase())) return part.toUpperCase();
+
       // Find the actual word positions (first and last non-separator)
       const wordParts = parts.filter(p => !/^(\s+|-|_)$/.test(p) && p.length > 0);
       const isFirst = wordParts[0] === part && index <= 1;
@@ -823,8 +927,9 @@ export default class SpellChecker {
   }
 
   _extractWords(name) {
-    // Split by common separators: hyphens, underscores, dots, camelCase
+    // Split by common separators: hyphens, underscores, dots, camelCase, and strip numbering prefixes
     return name
+      .replace(/^\d+[\.\)\-]\s*/, '') // Strip leading number prefixes like "1. " or "2) " or "3- "
       .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase split
       .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // ABCDef -> ABC Def
       .split(/[-_.\s]+/)
