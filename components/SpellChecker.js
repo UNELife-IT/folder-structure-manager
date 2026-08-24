@@ -241,19 +241,6 @@ export default class SpellChecker {
 
     // 2. NAMING CONVENTION CHECKS
 
-    // Check for spaces in names
-    if (name.includes(' ')) {
-      const kebab = name.replace(/\s+/g, '-').toLowerCase();
-      issues.push({
-        id: ++this.issueId,
-        path,
-        original: name,
-        message: 'Contains spaces — use hyphens or underscores instead',
-        suggestion: kebab,
-        severity: 'warning',
-        category: 'Convention'
-      });
-    }
 
     // Check for special characters (excluding . - _ and path separators)
     if (/[^a-zA-Z0-9._\-\s]/.test(name)) {
