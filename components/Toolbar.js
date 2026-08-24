@@ -3,7 +3,7 @@
 export default function Toolbar({
   onSave, onExport, onReset, searchTerm, onSearchChange,
   unsavedChanges, onExpandAll, onCollapseAll, onScan, scanning,
-  issueCount, onFixAll, onScreenshot
+  issueCount, onFixAll, onScreenshot, onRemoveGitkeep
 }) {
   const btnStyle = (color) => ({
     padding: '8px 16px',
@@ -88,6 +88,20 @@ export default function Toolbar({
           🔧 Fix All ({issueCount})
         </button>
       )}
+
+      <div style={separatorStyle} />
+
+      {/* Cleanup */}
+      <button
+        onClick={onRemoveGitkeep}
+        style={{
+          ...btnStyle('rgba(239,68,68,0.1)'),
+          border: '1px solid rgba(239,68,68,0.25)',
+          color: '#f87171'
+        }}
+      >
+        🧹 Remove .gitkeep
+      </button>
 
       <div style={{ flex: 1 }} />
 
