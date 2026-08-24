@@ -99,29 +99,47 @@ export default function Home() {
   }, []);
 
   // Handle ZIP upload
-  const handleUpload = useCallback(async (file) => {
+   const handleUpload = useCallback(async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
       setLoading(true);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
+      const text = await res.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Response was not JSON:', text);
+        addToast('Server error — check console for details', 'error');
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok) {
+        console.error('Upload API error:', data);
+        addToast(data.error || 'Upload failed', 'error');
+        setLoading(false);
+        return;
+      }
+
       if (data.structure) {
         setStructure(data.structure);
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('ZIP uploaded and parsed successfully', 'success');
       } else {
-        addToast('Failed to parse ZIP file', 'error');
+        addToast('No structure found in ZIP', 'error');
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      addToast('Upload failed', 'error');
+      addToast('Upload failed: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
   }, [addToast]);
-
+  
   // Export as ZIP
   const handleExport = useCallback(async () => {
     try {
