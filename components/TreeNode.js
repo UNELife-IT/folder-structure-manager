@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export default function TreeNode({
   node, path, depth, onAction, searchTerm, dragState,
   onDragStart, onDragOver, onDrop, expandAll, issues,
-  onMoveUp, onMoveDown, isFirst, isLast
+  onMoveUp, onMoveDown, isFirst, isLast, siblingCount
 }) {
   const [localExpanded, setLocalExpanded] = useState(depth < 2);
   const [editing, setEditing] = useState(false);
@@ -71,18 +71,60 @@ export default function TreeNode({
     ? (isExpanded ? '📂' : '📁')
     : getFileIcon(node.name);
 
-  const isDragOver = dragState?.overPath === path.join('/');
+  // Determine drop indicator position
+  const isDragging = dragState?.dragging;
+  const isDropTarget = dragState?.dropTarget && dragState.dropTarget.join('/') === pathStr;
+  const dropPosition = isDropTarget ? dragState.dropPosition : null;
 
   const issueIndicatorColor = worstSeverity === 'error' ? 'var(--accent-red)'
     : worstSeverity === 'warning' ? 'var(--accent-orange)' : 'var(--accent-teal)';
+
+  // Calculate drop position based on mouse Y within the element
+  const handleNodeDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!nodeRef.current) return;
+
+    const rect = nodeRef.current.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    let position;
+    if (isFolder) {
+      // For folders: top 25% = before, middle 50% = inside, bottom 25% = after
+      if (y < height * 0.25) {
+        position = 'before';
+      } else if (y > height * 0.75) {
+        position = 'after';
+      } else {
+        position = 'inside';
+      }
+    } else {
+      // For files: top 50% = before, bottom 50% = after
+      if (y < height * 0.5) {
+        position = 'before';
+      } else {
+        position = 'after';
+      }
+    }
+
+    onDragOver(path, position);
+  }, [path, isFolder, onDragOver]);
+
+  const handleNodeDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onDrop(path, dropPosition || 'after');
+  }, [path, dropPosition, onDrop]);
 
   const moveBtnStyle = (disabled) => ({
     background: 'none',
     border: 'none',
     color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)',
     cursor: disabled ? 'default' : 'pointer',
-    fontSize: '0.75rem',
-    padding: '2px 4px',
+    fontSize: '0.7rem',
+    padding: '1px 4px',
     borderRadius: '3px',
     opacity: disabled ? 0.3 : 0.7,
     transition: 'all 0.15s ease',
@@ -92,8 +134,25 @@ export default function TreeNode({
     justifyContent: 'center',
   });
 
+  // Drop indicator line styles
+  const dropIndicatorStyle = {
+    position: 'absolute',
+    left: `${depth * 20 + 10}px`,
+    right: '10px',
+    height: '2px',
+    background: 'var(--accent-purple)',
+    borderRadius: '1px',
+    pointerEvents: 'none',
+    zIndex: 10,
+  };
+
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* Drop indicator: before */}
+      {isDropTarget && dropPosition === 'before' && (
+        <div style={{ ...dropIndicatorStyle, top: 0 }} />
+      )}
+
       <div
         ref={nodeRef}
         draggable={!editing}
@@ -101,29 +160,20 @@ export default function TreeNode({
           e.stopPropagation();
           onDragStart(path);
         }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onDragOver(path);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onDrop(path);
-        }}
+        onDragOver={handleNodeDragOver}
+        onDrop={handleNodeDrop}
         onContextMenu={handleContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
         onClick={() => isFolder && setLocalExpanded(!localExpanded)}
         onMouseEnter={(e) => {
           setHovered(true);
-          if (!isDragOver) e.currentTarget.style.background = 'var(--bg-hover)';
+          if (!isDropTarget) e.currentTarget.style.background = 'var(--bg-hover)';
         }}
         onMouseLeave={(e) => {
           setHovered(false);
-          if (!isDragOver && !matchesSearch) e.currentTarget.style.background = 'transparent';
+          if (!isDropTarget && !matchesSearch) e.currentTarget.style.background = 'transparent';
           else if (matchesSearch) e.currentTarget.style.background = 'rgba(20,184,166,0.1)';
         }}
-        // Data attributes for screenshot capture
         data-tree-node="true"
         data-depth={depth}
         data-name={node.name}
@@ -139,13 +189,14 @@ export default function TreeNode({
           paddingLeft: `${depth * 20 + 10}px`,
           cursor: 'pointer',
           borderRadius: 'var(--radius-sm)',
-          background: isDragOver ? 'rgba(139,92,246,0.15)' :
+          background: isDropTarget && dropPosition === 'inside' ? 'rgba(139,92,246,0.15)' :
                       matchesSearch ? 'rgba(20,184,166,0.1)' : 'transparent',
-          borderLeft: isDragOver ? '3px solid var(--accent-purple)'
+          borderLeft: isDropTarget && dropPosition === 'inside' ? '3px solid var(--accent-purple)'
             : hasIssues ? `3px solid ${issueIndicatorColor}`
             : '3px solid transparent',
-          transition: 'all 0.1s ease',
-          userSelect: 'none'
+          transition: 'background 0.1s ease',
+          userSelect: 'none',
+          position: 'relative',
         }}
       >
         {/* Expand/collapse arrow */}
@@ -230,13 +281,12 @@ export default function TreeNode({
           </span>
         )}
 
-        {/* Move up/down buttons — only visible on hover */}
+        {/* Move up/down buttons — visible on hover */}
         {hovered && !editing && (
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: '0px',
+              gap: '2px',
               marginLeft: 'auto',
               flexShrink: 0,
             }}
@@ -245,12 +295,13 @@ export default function TreeNode({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 if (!isFirst) onMoveUp(path);
               }}
               disabled={isFirst}
               title="Move up"
               style={moveBtnStyle(isFirst)}
-              onMouseEnter={(e) => { if (!isFirst) e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; }}
+              onMouseEnter={(e) => { if (!isFirst) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; } }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = isFirst ? '0.3' : '0.7'; e.currentTarget.style.color = isFirst ? 'var(--text-muted)' : 'var(--text-secondary)'; }}
             >
               ▲
@@ -258,12 +309,13 @@ export default function TreeNode({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 if (!isLast) onMoveDown(path);
               }}
               disabled={isLast}
               title="Move down"
               style={moveBtnStyle(isLast)}
-              onMouseEnter={(e) => { if (!isLast) e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; }}
+              onMouseEnter={(e) => { if (!isLast) { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; } }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = isLast ? '0.3' : '0.7'; e.currentTarget.style.color = isLast ? 'var(--text-muted)' : 'var(--text-secondary)'; }}
             >
               ▼
@@ -271,6 +323,11 @@ export default function TreeNode({
           </div>
         )}
       </div>
+
+      {/* Drop indicator: after */}
+      {isDropTarget && dropPosition === 'after' && (
+        <div style={{ ...dropIndicatorStyle, bottom: 0 }} />
+      )}
 
       {/* Children */}
       {isFolder && isExpanded && node.children && (
@@ -293,6 +350,7 @@ export default function TreeNode({
               onMoveDown={onMoveDown}
               isFirst={i === 0}
               isLast={i === node.children.length - 1}
+              siblingCount={node.children.length}
             />
           ))}
         </div>
