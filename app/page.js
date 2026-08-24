@@ -88,7 +88,9 @@ export default function Home() {
   const lastSaveTimeRef = useRef(0);
   const serverTimestampRef = useRef(null);
   const treeRef = useRef(null);
+  const justSavedRef = useRef(false);
   const SAVE_COOLDOWN = 15000;
+  const POST_SAVE_BLOCK = 5000; // Block polls for 5s after saving
 
   useEffect(() => {
     structureRef.current = structure;
@@ -107,12 +109,15 @@ export default function Home() {
   }, []);
 
   const loadStructure = useCallback(async (silent = false) => {
+    // Block silent polls if we have unsaved changes, are saving, or just saved
     if (silent && unsavedRef.current) return;
     if (silent && savingRef.current) return;
+    if (silent && justSavedRef.current) return;
     if (silent && (Date.now() - lastSaveTimeRef.current) < SAVE_COOLDOWN) return;
 
     try {
-      const res = await fetch('/api/structure');
+      // Add cache-busting to the API call itself
+      const res = await fetch('/api/structure?_t=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) {
         if (!silent) setLoading(false);
         return;
@@ -123,6 +128,7 @@ export default function Home() {
       if (data.structure) {
         const serverTime = data.lastModified ? new Date(data.lastModified).getTime() : 0;
 
+        // For silent polls, only update if server data is genuinely newer
         if (silent && serverTimestampRef.current && serverTime <= serverTimestampRef.current) {
           return;
         }
@@ -151,6 +157,7 @@ export default function Home() {
     if (!toSave) return;
     if (savingRef.current) return;
     savingRef.current = true;
+    justSavedRef.current = true;
 
     const sorted = cleanStructure(toSave);
 
@@ -162,6 +169,7 @@ export default function Home() {
       });
 
       if (res.ok) {
+        const result = await res.json();
         const now = Date.now();
         lastSaveTimeRef.current = now;
         serverTimestampRef.current = now;
@@ -169,12 +177,19 @@ export default function Home() {
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('Changes saved', 'success');
+
+        // Block polls for POST_SAVE_BLOCK ms to let Vercel Blob propagate
+        setTimeout(() => {
+          justSavedRef.current = false;
+        }, POST_SAVE_BLOCK);
       } else {
         addToast('Failed to save changes', 'error');
+        justSavedRef.current = false;
       }
     } catch (err) {
       console.error('Failed to save:', err);
       addToast('Failed to save changes', 'error');
+      justSavedRef.current = false;
     } finally {
       savingRef.current = false;
     }
