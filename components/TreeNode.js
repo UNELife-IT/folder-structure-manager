@@ -2,10 +2,15 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-export default function TreeNode({ node, path, depth, onAction, searchTerm, dragState, onDragStart, onDragOver, onDrop, expandAll, issues }) {
+export default function TreeNode({
+  node, path, depth, onAction, searchTerm, dragState,
+  onDragStart, onDragOver, onDrop, expandAll, issues,
+  onMoveUp, onMoveDown, isFirst, isLast
+}) {
   const [localExpanded, setLocalExpanded] = useState(depth < 2);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
+  const [hovered, setHovered] = useState(false);
   const inputRef = useRef(null);
   const nodeRef = useRef(null);
 
@@ -71,6 +76,22 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
   const issueIndicatorColor = worstSeverity === 'error' ? 'var(--accent-red)'
     : worstSeverity === 'warning' ? 'var(--accent-orange)' : 'var(--accent-teal)';
 
+  const moveBtnStyle = (disabled) => ({
+    background: 'none',
+    border: 'none',
+    color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)',
+    cursor: disabled ? 'default' : 'pointer',
+    fontSize: '0.75rem',
+    padding: '2px 4px',
+    borderRadius: '3px',
+    opacity: disabled ? 0.3 : 0.7,
+    transition: 'all 0.15s ease',
+    lineHeight: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  });
+
   return (
     <div>
       <div
@@ -93,6 +114,15 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
         onContextMenu={handleContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
         onClick={() => isFolder && setLocalExpanded(!localExpanded)}
+        onMouseEnter={(e) => {
+          setHovered(true);
+          if (!isDragOver) e.currentTarget.style.background = 'var(--bg-hover)';
+        }}
+        onMouseLeave={(e) => {
+          setHovered(false);
+          if (!isDragOver && !matchesSearch) e.currentTarget.style.background = 'transparent';
+          else if (matchesSearch) e.currentTarget.style.background = 'rgba(20,184,166,0.1)';
+        }}
         // Data attributes for screenshot capture
         data-tree-node="true"
         data-depth={depth}
@@ -116,13 +146,6 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
             : '3px solid transparent',
           transition: 'all 0.1s ease',
           userSelect: 'none'
-        }}
-        onMouseEnter={(e) => {
-          if (!isDragOver) e.currentTarget.style.background = 'var(--bg-hover)';
-        }}
-        onMouseLeave={(e) => {
-          if (!isDragOver && !matchesSearch) e.currentTarget.style.background = 'transparent';
-          else if (matchesSearch) e.currentTarget.style.background = 'rgba(20,184,166,0.1)';
         }}
       >
         {/* Expand/collapse arrow */}
@@ -206,6 +229,47 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
             {node.children.length}
           </span>
         )}
+
+        {/* Move up/down buttons — only visible on hover */}
+        {hovered && !editing && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0px',
+              marginLeft: 'auto',
+              flexShrink: 0,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isFirst) onMoveUp(path);
+              }}
+              disabled={isFirst}
+              title="Move up"
+              style={moveBtnStyle(isFirst)}
+              onMouseEnter={(e) => { if (!isFirst) e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = isFirst ? '0.3' : '0.7'; e.currentTarget.style.color = isFirst ? 'var(--text-muted)' : 'var(--text-secondary)'; }}
+            >
+              ▲
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isLast) onMoveDown(path);
+              }}
+              disabled={isLast}
+              title="Move down"
+              style={moveBtnStyle(isLast)}
+              onMouseEnter={(e) => { if (!isLast) e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-purple)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = isLast ? '0.3' : '0.7'; e.currentTarget.style.color = isLast ? 'var(--text-muted)' : 'var(--text-secondary)'; }}
+            >
+              ▼
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Children */}
@@ -225,6 +289,10 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
               onDrop={onDrop}
               expandAll={expandAll}
               issues={issues}
+              onMoveUp={onMoveUp}
+              onMoveDown={onMoveDown}
+              isFirst={i === 0}
+              isLast={i === node.children.length - 1}
             />
           ))}
         </div>
