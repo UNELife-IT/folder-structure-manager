@@ -6,10 +6,9 @@ import ContextMenu from './ContextMenu';
 
 export default function TreeView({ structure, onChange, searchTerm, addToast, expandAll, issues, treeRef }) {
   const [contextMenu, setContextMenu] = useState(null);
-  const [dragState, setDragState] = useState({ dragging: null, overPath: null });
+  const [dragState, setDragState] = useState({ dragging: null, dropTarget: null, dropPosition: null });
   const internalRef = useRef(null);
 
-  // Use external ref if provided, otherwise internal
   const containerRef = treeRef || internalRef;
 
   const clone = (obj) => JSON.parse(JSON.stringify(obj));
@@ -17,20 +16,10 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
   const getNode = (root, path) => {
     let node = root;
     for (const idx of path) {
+      if (!node.children || !node.children[idx]) return null;
       node = node.children[idx];
     }
     return node;
-  };
-
-  const setNode = (root, path, value) => {
-    const newRoot = clone(root);
-    if (path.length === 0) return value;
-    let parent = newRoot;
-    for (let i = 0; i < path.length - 1; i++) {
-      parent = parent.children[path[i]];
-    }
-    parent.children[path[path.length - 1]] = value;
-    return newRoot;
   };
 
   const removeNode = (root, path) => {
@@ -54,20 +43,32 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
     return newRoot;
   };
 
+  const insertAt = (root, parentPath, index, child) => {
+    const newRoot = clone(root);
+    let parent = newRoot;
+    for (const idx of parentPath) {
+      parent = parent.children[idx];
+    }
+    if (!parent.children) parent.children = [];
+    parent.children.splice(index, 0, child);
+    return newRoot;
+  };
+
   const genId = () => Math.random().toString(36).substr(2, 9);
 
+  // Move a node up within its parent's children
   const handleMoveUp = useCallback((path) => {
     if (path.length === 0) return;
     const index = path[path.length - 1];
-    if (index === 0) return; // Already at top
+    if (index === 0) return;
 
     const newRoot = clone(structure);
+    const parentPath = path.slice(0, -1);
     let parent = newRoot;
-    for (let i = 0; i < path.length - 1; i++) {
-      parent = parent.children[path[i]];
+    for (const idx of parentPath) {
+      parent = parent.children[idx];
     }
 
-    // Swap with the item above
     const temp = parent.children[index];
     parent.children[index] = parent.children[index - 1];
     parent.children[index - 1] = temp;
@@ -76,19 +77,20 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
     addToast(`Moved "${temp.name}" up`, 'success');
   }, [structure, onChange, addToast]);
 
+  // Move a node down within its parent's children
   const handleMoveDown = useCallback((path) => {
     if (path.length === 0) return;
     const index = path[path.length - 1];
 
     const newRoot = clone(structure);
+    const parentPath = path.slice(0, -1);
     let parent = newRoot;
-    for (let i = 0; i < path.length - 1; i++) {
-      parent = parent.children[path[i]];
+    for (const idx of parentPath) {
+      parent = parent.children[idx];
     }
 
-    if (index >= parent.children.length - 1) return; // Already at bottom
+    if (index >= parent.children.length - 1) return;
 
-    // Swap with the item below
     const temp = parent.children[index];
     parent.children[index] = parent.children[index + 1];
     parent.children[index + 1] = temp;
@@ -100,7 +102,20 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
   const handleAction = useCallback((action, path, extra) => {
     if (action === 'contextMenu') {
       const node = path.length === 0 ? structure : getNode(structure, path);
-      setContextMenu({ x: extra.x, y: extra.y, path, node });
+      // Figure out isFirst/isLast for context menu
+      let isFirst = false;
+      let isLast = false;
+      if (path.length > 0) {
+        const index = path[path.length - 1];
+        const parentPath = path.slice(0, -1);
+        let parent = structure;
+        for (const idx of parentPath) {
+          parent = parent.children[idx];
+        }
+        isFirst = index === 0;
+        isLast = index === parent.children.length - 1;
+      }
+      setContextMenu({ x: extra.x, y: extra.y, path, node, isFirst, isLast });
       return;
     }
 
@@ -166,49 +181,110 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
         addToast(`Deleted "${node.name}"`, 'success');
         break;
       }
+      case 'moveUp': {
+        handleMoveUp(path);
+        break;
+      }
+      case 'moveDown': {
+        handleMoveDown(path);
+        break;
+      }
     }
-  }, [contextMenu, structure, onChange, addToast]);
+  }, [contextMenu, structure, onChange, addToast, handleMoveUp, handleMoveDown]);
+
+  // --- Drag and drop ---
 
   const handleDragStart = useCallback((path) => {
-    setDragState(prev => ({ ...prev, dragging: path }));
+    setDragState({ dragging: path, dropTarget: null, dropPosition: null });
   }, []);
 
-  const handleDragOver = useCallback((path) => {
-    setDragState(prev => ({ ...prev, overPath: path.join('/') }));
+  const handleDragOver = useCallback((path, position) => {
+    setDragState(prev => ({ ...prev, dropTarget: path, dropPosition: position }));
   }, []);
 
-  const handleDrop = useCallback((targetPath) => {
+  const handleDragEnd = useCallback(() => {
+    setDragState({ dragging: null, dropTarget: null, dropPosition: null });
+  }, []);
+
+  const handleDrop = useCallback((targetPath, position) => {
     const { dragging } = dragState;
     if (!dragging) return;
 
+    // Can't drop on itself
     if (dragging.join('/') === targetPath.join('/')) {
-      setDragState({ dragging: null, overPath: null });
+      handleDragEnd();
       return;
     }
 
+    // Can't drop into own child
     if (targetPath.join('/').startsWith(dragging.join('/') + '/')) {
       addToast('Cannot move a folder into its own child', 'error');
-      setDragState({ dragging: null, overPath: null });
+      handleDragEnd();
       return;
     }
 
     const dragNode = clone(getNode(structure, dragging));
+    if (!dragNode) { handleDragEnd(); return; }
+
+    // Remove the dragged node first
     let newStructure = removeNode(structure, dragging);
 
-    const targetNode = getNode(newStructure, targetPath);
-    if (targetNode.type === 'folder') {
-      newStructure = addChild(newStructure, targetPath, dragNode);
-    } else {
-      const parentPath = targetPath.slice(0, -1);
-      newStructure = addChild(newStructure, parentPath.length ? parentPath : [], dragNode);
+    if (position === 'inside') {
+      // Drop inside a folder
+      // Recalculate targetPath after removal
+      const adjustedTarget = adjustPathAfterRemoval(targetPath, dragging);
+      const targetNode = getNode(newStructure, adjustedTarget);
+      if (targetNode && targetNode.type === 'folder') {
+        newStructure = addChild(newStructure, adjustedTarget, dragNode);
+      } else {
+        // If target isn't a folder, insert after it
+        const parentPath = adjustedTarget.slice(0, -1);
+        const insertIndex = adjustedTarget[adjustedTarget.length - 1] + 1;
+        newStructure = insertAt(newStructure, parentPath, insertIndex, dragNode);
+      }
+    } else if (position === 'before') {
+      const adjustedTarget = adjustPathAfterRemoval(targetPath, dragging);
+      const parentPath = adjustedTarget.slice(0, -1);
+      const insertIndex = adjustedTarget[adjustedTarget.length - 1];
+      newStructure = insertAt(newStructure, parentPath, insertIndex, dragNode);
+    } else if (position === 'after') {
+      const adjustedTarget = adjustPathAfterRemoval(targetPath, dragging);
+      const parentPath = adjustedTarget.slice(0, -1);
+      const insertIndex = adjustedTarget[adjustedTarget.length - 1] + 1;
+      newStructure = insertAt(newStructure, parentPath, insertIndex, dragNode);
     }
 
     onChange(newStructure);
-    setDragState({ dragging: null, overPath: null });
+    handleDragEnd();
     addToast(`Moved "${dragNode.name}"`, 'success');
-  }, [dragState, structure, onChange, addToast]);
+  }, [dragState, structure, onChange, addToast, handleDragEnd]);
 
-  // Calculate sibling counts for the root's children
+  // After removing a node, paths that come after it in the same parent shift down by 1
+  function adjustPathAfterRemoval(targetPath, removedPath) {
+    const adjusted = [...targetPath];
+
+    // Only adjust if they share the same parent
+    if (removedPath.length <= targetPath.length) {
+      const parentLen = removedPath.length - 1;
+      let sameParent = true;
+      for (let i = 0; i < parentLen; i++) {
+        if (removedPath[i] !== targetPath[i]) {
+          sameParent = false;
+          break;
+        }
+      }
+      if (sameParent && parentLen < targetPath.length) {
+        const removedIndex = removedPath[parentLen];
+        const targetIndex = targetPath[parentLen];
+        if (targetIndex > removedIndex) {
+          adjusted[parentLen] = targetIndex - 1;
+        }
+      }
+    }
+
+    return adjusted;
+  }
+
   const rootChildCount = structure?.children?.length || 0;
 
   if (!structure) return null;
@@ -218,7 +294,7 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
       ref={containerRef}
       data-tree-container="true"
       style={{ minHeight: '100%' }}
-      onDragEnd={() => setDragState({ dragging: null, overPath: null })}
+      onDragEnd={handleDragEnd}
     >
       {/* Root node */}
       <div
@@ -228,11 +304,11 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
         }}
         onDragOver={(e) => {
           e.preventDefault();
-          handleDragOver([]);
+          handleDragOver([], 'inside');
         }}
         onDrop={(e) => {
           e.preventDefault();
-          handleDrop([]);
+          handleDrop([], 'inside');
         }}
         data-tree-node="true"
         data-depth="0"
@@ -248,7 +324,8 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
           display: 'flex', alignItems: 'center', gap: '8px',
           borderRadius: 'var(--radius-sm)',
           cursor: 'pointer',
-          background: dragState.overPath === '' ? 'rgba(139,92,246,0.15)' : 'transparent'
+          background: (dragState.dropTarget && dragState.dropTarget.length === 0 && dragState.dropPosition === 'inside')
+            ? 'rgba(139,92,246,0.15)' : 'transparent'
         }}
         onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -289,6 +366,7 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
           onMoveDown={handleMoveDown}
           isFirst={i === 0}
           isLast={i === rootChildCount - 1}
+          siblingCount={rootChildCount}
         />
       ))}
 
@@ -300,6 +378,8 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
           node={contextMenu.node}
           onAction={handleContextAction}
           onClose={() => setContextMenu(null)}
+          isFirst={contextMenu.isFirst}
+          isLast={contextMenu.isLast}
         />
       )}
     </div>
