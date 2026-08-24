@@ -41,7 +41,7 @@ export async function PUT(request) {
 
     // Save new
     const blob = await put(BLOB_FILENAME, JSON.stringify(structure), {
-      access: 'public',
+      access: 'Private',
       contentType: 'application/json',
       addRandomSuffix: false,
     });
