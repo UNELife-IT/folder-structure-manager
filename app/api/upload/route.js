@@ -104,7 +104,7 @@ export async function POST(request) {
 
     // Save to Vercel Blob
     await put(BLOB_FILENAME, JSON.stringify(structure), {
-      access: 'Private',
+      access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
     });
