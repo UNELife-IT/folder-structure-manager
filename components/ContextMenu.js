@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-export default function ContextMenu({ x, y, node, onAction, onClose }) {
+export default function ContextMenu({ x, y, node, onAction, onClose, isFirst, isLast }) {
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -24,6 +24,9 @@ export default function ContextMenu({ x, y, node, onAction, onClose }) {
     { label: '✏️ Rename', action: 'rename' },
     { label: '📋 Duplicate', action: 'duplicate' },
     { divider: true },
+    { label: '⬆️ Move Up', action: 'moveUp', disabled: isFirst },
+    { label: '⬇️ Move Down', action: 'moveDown', disabled: isLast },
+    { divider: true },
     { label: '🗑️ Delete', action: 'delete', danger: true },
   ];
 
@@ -39,13 +42,14 @@ export default function ContextMenu({ x, y, node, onAction, onClose }) {
     minWidth: '180px'
   };
 
-  const itemStyle = (danger) => ({
+  const itemStyle = (danger, disabled) => ({
     padding: '8px 16px',
-    cursor: 'pointer',
+    cursor: disabled ? 'default' : 'pointer',
     fontSize: '0.85rem',
-    color: danger ? 'var(--accent-red)' : 'var(--text-primary)',
+    color: disabled ? 'var(--text-muted)' : danger ? 'var(--accent-red)' : 'var(--text-primary)',
     display: 'flex', alignItems: 'center', gap: '8px',
-    transition: 'background 0.1s'
+    transition: 'background 0.1s',
+    opacity: disabled ? 0.4 : 1,
   });
 
   return (
@@ -56,10 +60,14 @@ export default function ContextMenu({ x, y, node, onAction, onClose }) {
         ) : (
           <div
             key={i}
-            style={itemStyle(item.danger)}
-            onClick={() => { onAction(item.action); onClose(); }}
-            onMouseEnter={(e) => e.target.style.background = 'var(--bg-hover)'}
-            onMouseLeave={(e) => e.target.style.background = 'transparent'}
+            style={itemStyle(item.danger, item.disabled)}
+            onClick={() => {
+              if (item.disabled) return;
+              onAction(item.action);
+              onClose();
+            }}
+            onMouseEnter={(e) => { if (!item.disabled) e.target.style.background = 'var(--bg-hover)'; }}
+            onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
           >
             {item.label}
           </div>
