@@ -16,8 +16,12 @@ export async function GET() {
     if (!blob) {
       return NextResponse.json({ structure: null });
     }
-    const res = await fetch(blob.url);
+
+    // Add cache-busting to avoid stale CDN responses
+    const fetchUrl = blob.url + (blob.url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    const res = await fetch(fetchUrl, { cache: 'no-store' });
     const data = await res.json();
+
     return NextResponse.json({
       structure: data,
       lastModified: blob.uploadedAt
@@ -33,20 +37,19 @@ export async function PUT(request) {
   try {
     const { structure } = await request.json();
 
-    // Delete old blob if exists
-    const existing = await findBlob();
-    if (existing) {
-      await del(existing.url);
-    }
-
-    // Save new
+    // Save new blob (overwrite by using addRandomSuffix: false)
+    // Put FIRST, then delete old — avoids the window where no blob exists
     const blob = await put(BLOB_FILENAME, JSON.stringify(structure), {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
     });
 
-    return NextResponse.json({ success: true, url: blob.url });
+    return NextResponse.json({
+      success: true,
+      url: blob.url,
+      savedAt: new Date().toISOString()
+    });
   } catch (err) {
     console.error('PUT structure error:', err);
     return NextResponse.json({ error: 'Failed to save' }, { status: 500 });
