@@ -56,6 +56,47 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
 
   const genId = () => Math.random().toString(36).substr(2, 9);
 
+  const handleMoveUp = useCallback((path) => {
+    if (path.length === 0) return;
+    const index = path[path.length - 1];
+    if (index === 0) return; // Already at top
+
+    const newRoot = clone(structure);
+    let parent = newRoot;
+    for (let i = 0; i < path.length - 1; i++) {
+      parent = parent.children[path[i]];
+    }
+
+    // Swap with the item above
+    const temp = parent.children[index];
+    parent.children[index] = parent.children[index - 1];
+    parent.children[index - 1] = temp;
+
+    onChange(newRoot);
+    addToast(`Moved "${temp.name}" up`, 'success');
+  }, [structure, onChange, addToast]);
+
+  const handleMoveDown = useCallback((path) => {
+    if (path.length === 0) return;
+    const index = path[path.length - 1];
+
+    const newRoot = clone(structure);
+    let parent = newRoot;
+    for (let i = 0; i < path.length - 1; i++) {
+      parent = parent.children[path[i]];
+    }
+
+    if (index >= parent.children.length - 1) return; // Already at bottom
+
+    // Swap with the item below
+    const temp = parent.children[index];
+    parent.children[index] = parent.children[index + 1];
+    parent.children[index + 1] = temp;
+
+    onChange(newRoot);
+    addToast(`Moved "${temp.name}" down`, 'success');
+  }, [structure, onChange, addToast]);
+
   const handleAction = useCallback((action, path, extra) => {
     if (action === 'contextMenu') {
       const node = path.length === 0 ? structure : getNode(structure, path);
@@ -167,6 +208,9 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
     addToast(`Moved "${dragNode.name}"`, 'success');
   }, [dragState, structure, onChange, addToast]);
 
+  // Calculate sibling counts for the root's children
+  const rootChildCount = structure?.children?.length || 0;
+
   if (!structure) return null;
 
   return (
@@ -241,6 +285,10 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
           onDrop={handleDrop}
           expandAll={expandAll}
           issues={issues}
+          onMoveUp={handleMoveUp}
+          onMoveDown={handleMoveDown}
+          isFirst={i === 0}
+          isLast={i === rootChildCount - 1}
         />
       ))}
 
