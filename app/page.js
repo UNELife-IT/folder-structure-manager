@@ -5,6 +5,7 @@ import TreeView from '../components/TreeView';
 import UploadZone from '../components/UploadZone';
 import Toolbar from '../components/Toolbar';
 import SpellChecker from '../components/SpellChecker';
+import { captureElement, downloadCanvas } from '../components/ScreenshotHelper';
 
 // Natural sort comparator — handles numbers properly
 // "2-chapter" comes before "10-appendix"
@@ -68,6 +69,7 @@ export default function Home() {
   const lastSaveTimeRef = useRef(0);
   const serverTimestampRef = useRef(null);
   const SAVE_COOLDOWN = 15000;
+  const treeRef = useRef(null);
 
   useEffect(() => {
     structureRef.current = structure;
@@ -421,6 +423,22 @@ export default function Home() {
               issueCount={issues.length}
               onFixAll={handleFixAll}
             />
+  // Screenshot handler
+  const handleScreenshot = useCallback(async () => {
+    if (!treeRef.current) {
+      addToast('No structure to capture', 'error');
+      return;
+    }
+    try {
+      addToast('Capturing screenshot...', 'info');
+      const canvas = await captureElement(treeRef.current);
+      downloadCanvas(canvas, `folder-structure-${Date.now()}.png`);
+      addToast('Screenshot downloaded!', 'success');
+    } catch (err) {
+      console.error('Screenshot failed:', err);
+      addToast('Screenshot failed: ' + err.message, 'error');
+    }
+  }, [addToast]);
 
             {/* Issues Panel */}
             {issues.length > 0 && (
