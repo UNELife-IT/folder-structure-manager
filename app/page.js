@@ -7,8 +7,7 @@ import Toolbar from '../components/Toolbar';
 import SpellChecker from '../components/SpellChecker';
 import { captureElement, downloadCanvas } from '../components/ScreenshotHelper';
 
-// Natural sort comparator — handles numbers properly
-// "2-chapter" comes before "10-appendix"
+// Natural sort comparator
 function naturalCompare(a, b) {
   const ax = [];
   const bx = [];
@@ -30,18 +29,15 @@ function naturalCompare(a, b) {
   return ax.length - bx.length;
 }
 
-// Recursively sort all children: folders first, then natural/numerical order
+// Recursively sort all children
 function sortStructure(node) {
   if (!node || !node.children) return node;
 
   node.children.sort((a, b) => {
-    // Folders always come first
     if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-    // Natural sort (handles numbers correctly)
     return naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
   });
 
-  // Recurse into child folders
   node.children.forEach(child => {
     if (child.type === 'folder') {
       sortStructure(child);
@@ -68,8 +64,8 @@ export default function Home() {
   const savingRef = useRef(false);
   const lastSaveTimeRef = useRef(0);
   const serverTimestampRef = useRef(null);
-  const SAVE_COOLDOWN = 15000;
   const treeRef = useRef(null);
+  const SAVE_COOLDOWN = 15000;
 
   useEffect(() => {
     structureRef.current = structure;
@@ -109,7 +105,6 @@ export default function Home() {
         }
 
         if (!unsavedRef.current) {
-          // Sort on load
           setStructure(sortStructure(JSON.parse(JSON.stringify(data.structure))));
           serverTimestampRef.current = serverTime;
         }
@@ -134,7 +129,6 @@ export default function Home() {
     if (savingRef.current) return;
     savingRef.current = true;
 
-    // Sort before saving
     const sorted = sortStructure(JSON.parse(JSON.stringify(toSave)));
 
     try {
@@ -183,7 +177,6 @@ export default function Home() {
     return () => clearInterval(autoSaveRef.current);
   }, [saveStructure]);
 
-  // Handle structure updates — sort after every change
   const handleStructureChange = useCallback((newStructure) => {
     if (!newStructure) return;
     const sorted = sortStructure(JSON.parse(JSON.stringify(newStructure)));
@@ -218,7 +211,6 @@ export default function Home() {
       }
 
       if (data.structure) {
-        // Sort after upload
         const sorted = sortStructure(JSON.parse(JSON.stringify(data.structure)));
         setStructure(sorted);
         const now = Date.now();
@@ -316,7 +308,6 @@ export default function Home() {
       }
     }
 
-    // Sort after fixing
     sortStructure(newStructure);
     setStructure(newStructure);
     setUnsavedChanges(true);
@@ -335,13 +326,29 @@ export default function Home() {
     if (node) {
       node.name = issue.suggestion;
     }
-    // Sort after fixing
     sortStructure(newStructure);
     setStructure(newStructure);
     setUnsavedChanges(true);
     setIssues(prev => prev.filter(i => i.id !== issue.id));
     addToast(`Fixed: "${issue.original}" → "${issue.suggestion}"`, 'success');
   }, [structure, addToast]);
+
+  // Screenshot handler
+  const handleScreenshot = useCallback(async () => {
+    if (!treeRef.current) {
+      addToast('No structure to capture', 'error');
+      return;
+    }
+    try {
+      addToast('Capturing screenshot...', 'info');
+      const canvas = await captureElement(treeRef.current);
+      downloadCanvas(canvas, `folder-structure-${Date.now()}.png`);
+      addToast('Screenshot downloaded!', 'success');
+    } catch (err) {
+      console.error('Screenshot failed:', err);
+      addToast('Screenshot failed: ' + err.message, 'error');
+    }
+  }, [addToast]);
 
   if (loading) {
     return (
@@ -422,23 +429,8 @@ export default function Home() {
               scanning={scanning}
               issueCount={issues.length}
               onFixAll={handleFixAll}
+              onScreenshot={handleScreenshot}
             />
-  // Screenshot handler
-  const handleScreenshot = useCallback(async () => {
-    if (!treeRef.current) {
-      addToast('No structure to capture', 'error');
-      return;
-    }
-    try {
-      addToast('Capturing screenshot...', 'info');
-      const canvas = await captureElement(treeRef.current);
-      downloadCanvas(canvas, `folder-structure-${Date.now()}.png`);
-      addToast('Screenshot downloaded!', 'success');
-    } catch (err) {
-      console.error('Screenshot failed:', err);
-      addToast('Screenshot failed: ' + err.message, 'error');
-    }
-  }, [addToast]);
 
             {/* Issues Panel */}
             {issues.length > 0 && (
@@ -527,6 +519,7 @@ export default function Home() {
                 addToast={addToast}
                 expandAll={expandAll}
                 issues={issues}
+                treeRef={treeRef}
               />
             </div>
           </>
