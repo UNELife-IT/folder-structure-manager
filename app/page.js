@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import TreeView from '../components/TreeView';
 import UploadZone from '../components/UploadZone';
 import Toolbar from '../components/Toolbar';
+import SpellChecker from '../components/SpellChecker';
 
 export default function Home() {
   const [structure, setStructure] = useState(null);
@@ -12,11 +13,13 @@ export default function Home() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [toasts, setToasts] = useState([]);
+  const [expandAll, setExpandAll] = useState(null); // null = default, true = expand, false = collapse
+  const [issues, setIssues] = useState([]); // spell/naming issues
+  const [scanning, setScanning] = useState(false);
   const autoSaveRef = useRef(null);
   const pollRef = useRef(null);
   const structureRef = useRef(structure);
 
-  // Keep ref in sync
   useEffect(() => {
     structureRef.current = structure;
   }, [structure]);
@@ -29,7 +32,6 @@ export default function Home() {
     }, 3000);
   }, []);
 
-  // Load structure from server
   const loadStructure = useCallback(async (silent = false) => {
     try {
       const res = await fetch('/api/structure');
@@ -48,7 +50,6 @@ export default function Home() {
     }
   }, []);
 
-  // Save structure to server
   const saveStructure = useCallback(async (data) => {
     const toSave = data || structureRef.current;
     if (!toSave) return;
@@ -69,12 +70,10 @@ export default function Home() {
     }
   }, [addToast]);
 
-  // Initial load
   useEffect(() => {
     loadStructure();
   }, [loadStructure]);
 
-  // Polling for real-time collaboration (every 10 seconds)
   useEffect(() => {
     pollRef.current = setInterval(() => {
       loadStructure(true);
@@ -82,7 +81,6 @@ export default function Home() {
     return () => clearInterval(pollRef.current);
   }, [loadStructure]);
 
-  // Auto-save every 5 minutes
   useEffect(() => {
     autoSaveRef.current = setInterval(() => {
       if (structureRef.current) {
@@ -92,21 +90,21 @@ export default function Home() {
     return () => clearInterval(autoSaveRef.current);
   }, [saveStructure]);
 
-  // Handle structure updates from tree operations
   const handleStructureChange = useCallback((newStructure) => {
     setStructure(newStructure);
     setUnsavedChanges(true);
+    // Clear issues when structure changes since they may be stale
+    setIssues([]);
   }, []);
 
-  // Handle ZIP upload
-   const handleUpload = useCallback(async (file) => {
+  const handleUpload = useCallback(async (file) => {
     const formData = new FormData();
     formData.append('file', file);
     try {
       setLoading(true);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const text = await res.text();
-      
+
       let data;
       try {
         data = JSON.parse(text);
@@ -139,8 +137,7 @@ export default function Home() {
       setLoading(false);
     }
   }, [addToast]);
-  
-  // Export as ZIP
+
   const handleExport = useCallback(async () => {
     try {
       const res = await fetch('/api/export', {
@@ -162,18 +159,81 @@ export default function Home() {
     }
   }, [structure, addToast]);
 
-  // Reset / upload new
   const handleReset = useCallback(async () => {
     if (!confirm('Are you sure you want to clear the current structure? This cannot be undone.')) return;
     try {
       await fetch('/api/structure', { method: 'DELETE' });
       setStructure(null);
       setUnsavedChanges(false);
+      setIssues([]);
       addToast('Structure cleared', 'info');
     } catch (err) {
       addToast('Failed to clear structure', 'error');
     }
   }, [addToast]);
+
+  // Scan handler
+  const handleScan = useCallback(() => {
+    if (!structure) return;
+    setScanning(true);
+    const checker = new SpellChecker();
+    const found = checker.scanStructure(structure);
+    setIssues(found);
+    setScanning(false);
+    if (found.length === 0) {
+      addToast('No issues found — all names look good!', 'success');
+    } else {
+      addToast(`Found ${found.length} issue${found.length > 1 ? 's' : ''}`, 'info');
+    }
+  }, [structure, addToast]);
+
+  // Fix All handler
+  const handleFixAll = useCallback(() => {
+    if (!structure || issues.length === 0) return;
+    const fixable = issues.filter(i => i.suggestion);
+    if (fixable.length === 0) {
+      addToast('No auto-fixable issues', 'info');
+      return;
+    }
+    if (!confirm(`Apply ${fixable.length} fix${fixable.length > 1 ? 'es' : ''}?`)) return;
+
+    let newStructure = JSON.parse(JSON.stringify(structure));
+
+    // Apply fixes deepest-path-first to avoid index shifting
+    const sorted = [...fixable].sort((a, b) => b.path.length - a.path.length);
+
+    for (const issue of sorted) {
+      let node = newStructure;
+      for (const idx of issue.path) {
+        node = node.children[idx];
+      }
+      if (node) {
+        node.name = issue.suggestion;
+      }
+    }
+
+    setStructure(newStructure);
+    setUnsavedChanges(true);
+    setIssues([]);
+    addToast(`Applied ${fixable.length} fix${fixable.length > 1 ? 'es' : ''}`, 'success');
+  }, [structure, issues, addToast]);
+
+  // Fix single issue
+  const handleFixSingle = useCallback((issue) => {
+    if (!issue.suggestion) return;
+    let newStructure = JSON.parse(JSON.stringify(structure));
+    let node = newStructure;
+    for (const idx of issue.path) {
+      node = node.children[idx];
+    }
+    if (node) {
+      node.name = issue.suggestion;
+    }
+    setStructure(newStructure);
+    setUnsavedChanges(true);
+    setIssues(prev => prev.filter(i => i.id !== issue.id));
+    addToast(`Fixed: "${issue.original}" → "${issue.suggestion}"`, 'success');
+  }, [structure, addToast]);
 
   if (loading) {
     return (
@@ -248,13 +308,101 @@ export default function Home() {
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               unsavedChanges={unsavedChanges}
+              onExpandAll={() => setExpandAll(true)}
+              onCollapseAll={() => setExpandAll(false)}
+              onScan={handleScan}
+              scanning={scanning}
+              issueCount={issues.length}
+              onFixAll={handleFixAll}
             />
+
+            {/* Issues Panel */}
+            {issues.length > 0 && (
+              <div style={{
+                padding: '12px 24px',
+                background: 'rgba(245,158,11,0.05)',
+                borderBottom: '1px solid var(--border-color)',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                flexShrink: 0
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: '8px'
+                }}>
+                  <span style={{
+                    fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-orange)',
+                    display: 'flex', alignItems: 'center', gap: '6px'
+                  }}>
+                    ⚠️ {issues.length} issue{issues.length > 1 ? 's' : ''} found
+                  </span>
+                  <button
+                    onClick={() => setIssues([])}
+                    style={{
+                      background: 'none', border: 'none', color: 'var(--text-muted)',
+                      cursor: 'pointer', fontSize: '0.8rem'
+                    }}
+                  >
+                    ✕ Dismiss
+                  </button>
+                </div>
+                {issues.map(issue => (
+                  <div key={issue.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '6px 10px', marginBottom: '4px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.82rem',
+                    borderLeft: `3px solid ${issue.severity === 'error' ? 'var(--accent-red)' : issue.severity === 'warning' ? 'var(--accent-orange)' : 'var(--accent-teal)'}`
+                  }}>
+                    <span style={{ flexShrink: 0 }}>
+                      {issue.severity === 'error' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵'}
+                    </span>
+                    <span style={{ flex: 1, color: 'var(--text-secondary)' }}>
+                      <strong style={{ color: 'var(--text-primary)' }}>{issue.original}</strong>
+                      {' — '}{issue.message}
+                      {issue.suggestion && (
+                        <span style={{ color: 'var(--accent-teal)' }}> → {issue.suggestion}</span>
+                      )}
+                    </span>
+                    <span style={{
+                      fontSize: '0.7rem', color: 'var(--text-muted)',
+                      background: 'var(--bg-primary)', padding: '2px 6px',
+                      borderRadius: '4px', flexShrink: 0
+                    }}>
+                      {issue.category}
+                    </span>
+                    {issue.suggestion && (
+                      <button
+                        onClick={() => handleFixSingle(issue)}
+                        style={{
+                          padding: '3px 10px',
+                          background: 'rgba(20,184,166,0.15)',
+                          border: '1px solid rgba(20,184,166,0.3)',
+                          borderRadius: '4px',
+                          color: 'var(--accent-teal)',
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          fontWeight: 600
+                        }}
+                      >
+                        Fix
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
               <TreeView
                 structure={structure}
                 onChange={handleStructureChange}
                 searchTerm={searchTerm}
                 addToast={addToast}
+                expandAll={expandAll}
+                issues={issues}
               />
             </div>
           </>
