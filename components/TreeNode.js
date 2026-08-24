@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
-export default function TreeNode({ node, path, depth, onAction, searchTerm, dragState, onDragStart, onDragOver, onDrop }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+export default function TreeNode({ node, path, depth, onAction, searchTerm, dragState, onDragStart, onDragOver, onDrop, expandAll, issues }) {
+  const [localExpanded, setLocalExpanded] = useState(depth < 2);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(node.name);
   const inputRef = useRef(null);
@@ -14,8 +14,25 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
   const matchesSearch = searchTerm && node.name.toLowerCase().includes(searchTerm.toLowerCase());
   const childMatchesSearch = searchTerm && isFolder && hasDescendantMatch(node, searchTerm);
 
-  // Auto-expand if search matches a descendant
-  const isExpanded = searchTerm ? (matchesSearch || childMatchesSearch) : expanded;
+  // Check if this node has issues
+  const pathStr = path.join('/');
+  const nodeIssues = issues ? issues.filter(i => i.path.join('/') === pathStr) : [];
+  const hasIssues = nodeIssues.length > 0;
+  const worstSeverity = hasIssues
+    ? (nodeIssues.some(i => i.severity === 'error') ? 'error'
+      : nodeIssues.some(i => i.severity === 'warning') ? 'warning' : 'info')
+    : null;
+
+  // Handle expandAll prop
+  useEffect(() => {
+    if (expandAll === true) setLocalExpanded(true);
+    if (expandAll === false) setLocalExpanded(false);
+  }, [expandAll]);
+
+  // Determine expanded state
+  const isExpanded = searchTerm
+    ? (matchesSearch || childMatchesSearch)
+    : localExpanded;
 
   function hasDescendantMatch(n, term) {
     if (!n.children) return false;
@@ -43,7 +60,6 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
     setTimeout(() => inputRef.current?.select(), 50);
   };
 
-  // Expose startEditing via node action
   if (node._startEdit) {
     node._startEdit = false;
     setTimeout(startEditing, 50);
@@ -54,6 +70,9 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
     : getFileIcon(node.name);
 
   const isDragOver = dragState?.overPath === path.join('/');
+
+  const issueIndicatorColor = worstSeverity === 'error' ? 'var(--accent-red)'
+    : worstSeverity === 'warning' ? 'var(--accent-orange)' : 'var(--accent-teal)';
 
   return (
     <div>
@@ -76,7 +95,7 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
         }}
         onContextMenu={handleContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
-        onClick={() => isFolder && setExpanded(!expanded)}
+        onClick={() => isFolder && setLocalExpanded(!localExpanded)}
         style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           padding: '5px 10px',
@@ -85,7 +104,9 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
           borderRadius: 'var(--radius-sm)',
           background: isDragOver ? 'rgba(139,92,246,0.15)' :
                       matchesSearch ? 'rgba(20,184,166,0.1)' : 'transparent',
-          borderLeft: isDragOver ? '3px solid var(--accent-purple)' : '3px solid transparent',
+          borderLeft: isDragOver ? '3px solid var(--accent-purple)'
+            : hasIssues ? `3px solid ${issueIndicatorColor}`
+            : '3px solid transparent',
           transition: 'all 0.1s ease',
           userSelect: 'none'
         }}
@@ -136,9 +157,32 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
           <span style={{
             fontSize: '0.85rem',
             color: matchesSearch ? 'var(--accent-teal)' : 'var(--text-primary)',
-            fontWeight: matchesSearch ? 600 : 400
+            fontWeight: matchesSearch ? 600 : 400,
+            textDecoration: hasIssues && worstSeverity === 'error' ? 'wavy underline red' :
+                           hasIssues && worstSeverity === 'warning' ? 'wavy underline orange' :
+                           hasIssues ? 'wavy underline teal' : 'none',
+            textUnderlineOffset: '3px'
           }}>
             {highlightMatch(node.name, searchTerm)}
+          </span>
+        )}
+
+        {/* Issue indicator */}
+        {hasIssues && (
+          <span
+            title={nodeIssues.map(i => i.message).join('\n')}
+            style={{
+              fontSize: '0.7rem',
+              color: issueIndicatorColor,
+              background: `${issueIndicatorColor}15`,
+              padding: '1px 6px',
+              borderRadius: '10px',
+              border: `1px solid ${issueIndicatorColor}40`,
+              flexShrink: 0,
+              cursor: 'help'
+            }}
+          >
+            {worstSeverity === 'error' ? '🔴' : worstSeverity === 'warning' ? '🟡' : '🔵'} {nodeIssues.length}
           </span>
         )}
 
@@ -172,6 +216,8 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDrop={onDrop}
+              expandAll={expandAll}
+              issues={issues}
             />
           ))}
         </div>
