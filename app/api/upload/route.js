@@ -42,7 +42,6 @@ function buildTree(paths) {
     }
   }
 
-  // Sort: folders first, then alphabetical
   const sortChildren = (node) => {
     if (node.children) {
       node.children.sort((a, b) => {
@@ -54,7 +53,6 @@ function buildTree(paths) {
   };
   sortChildren(root);
 
-  // Use the ZIP's root folder name if there's a single top-level folder
   if (root.children.length === 1 && root.children[0].type === 'folder') {
     const topFolder = root.children[0];
     root.name = topFolder.name;
@@ -73,23 +71,39 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const zip = await JSZip.loadAsync(buffer);
+    // Read file as ArrayBuffer directly — works reliably on Vercel
+    const arrayBuffer = await file.arrayBuffer();
+    
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(arrayBuffer);
+    } catch (zipError) {
+      console.error('JSZip parse error:', zipError);
+      return NextResponse.json({ error: 'Invalid ZIP file. Please ensure you are uploading a valid .zip file.' }, { status: 400 });
+    }
 
     const paths = Object.keys(zip.files)
-      .filter(p => !p.startsWith('__MACOSX') && !p.includes('.DS_Store'))
+      .filter(p => !p.startsWith('__MACOSX') && !p.includes('.DS_Store') && !p.startsWith('.'))
       .sort();
+
+    if (paths.length === 0) {
+      return NextResponse.json({ error: 'ZIP file appears to be empty' }, { status: 400 });
+    }
 
     const structure = buildTree(paths);
 
     // Delete old blob
-    const { blobs } = await list({ prefix: BLOB_PREFIX });
-    for (const blob of blobs) {
-      await del(blob.url);
+    try {
+      const { blobs } = await list({ prefix: BLOB_PREFIX });
+      for (const blob of blobs) {
+        await del(blob.url);
+      }
+    } catch (e) {
+      console.error('Failed to clean old blobs:', e);
     }
 
     // Save to Vercel Blob
-    await put(`${BLOB_PREFIX}/structure.json`, JSON.stringify(structure), {
+    await put(BLOB_FILENAME, JSON.stringify(structure), {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
@@ -98,6 +112,6 @@ export async function POST(request) {
     return NextResponse.json({ structure });
   } catch (err) {
     console.error('Upload error:', err);
-    return NextResponse.json({ error: 'Failed to process ZIP' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to process ZIP: ' + err.message }, { status: 500 });
   }
 }
