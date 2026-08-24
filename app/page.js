@@ -6,6 +6,50 @@ import UploadZone from '../components/UploadZone';
 import Toolbar from '../components/Toolbar';
 import SpellChecker from '../components/SpellChecker';
 
+// Natural sort comparator — handles numbers properly
+// "2-chapter" comes before "10-appendix"
+function naturalCompare(a, b) {
+  const ax = [];
+  const bx = [];
+
+  a.replace(/(\d+)|(\D+)/g, (_, $1, $2) => { ax.push([$1 || Infinity, $2 || '']); });
+  b.replace(/(\d+)|(\D+)/g, (_, $1, $2) => { bx.push([$1 || Infinity, $2 || '']); });
+
+  while (ax.length && bx.length) {
+    const an = ax.shift();
+    const bn = bx.shift();
+
+    const nn = (an[0] === Infinity ? 0 : Number(an[0])) - (bn[0] === Infinity ? 0 : Number(bn[0]));
+    if (nn) return nn;
+
+    const ss = an[1].localeCompare(bn[1], undefined, { sensitivity: 'base' });
+    if (ss) return ss;
+  }
+
+  return ax.length - bx.length;
+}
+
+// Recursively sort all children: folders first, then natural/numerical order
+function sortStructure(node) {
+  if (!node || !node.children) return node;
+
+  node.children.sort((a, b) => {
+    // Folders always come first
+    if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+    // Natural sort (handles numbers correctly)
+    return naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
+  });
+
+  // Recurse into child folders
+  node.children.forEach(child => {
+    if (child.type === 'folder') {
+      sortStructure(child);
+    }
+  });
+
+  return node;
+}
+
 export default function Home() {
   const [structure, setStructure] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,8 +65,10 @@ export default function Home() {
   const structureRef = useRef(structure);
   const unsavedRef = useRef(unsavedChanges);
   const savingRef = useRef(false);
+  const lastSaveTimeRef = useRef(0);
+  const serverTimestampRef = useRef(null);
+  const SAVE_COOLDOWN = 15000;
 
-  // Keep refs in sync
   useEffect(() => {
     structureRef.current = structure;
   }, [structure]);
@@ -39,17 +85,10 @@ export default function Home() {
     }, 3000);
   }, []);
 
-  // Load structure from server
   const loadStructure = useCallback(async (silent = false) => {
-    // CRITICAL: Don't overwrite local changes with server data
-    if (silent && unsavedRef.current) {
-      return;
-    }
-
-    // Don't poll while a save is in progress
-    if (silent && savingRef.current) {
-      return;
-    }
+    if (silent && unsavedRef.current) return;
+    if (silent && savingRef.current) return;
+    if (silent && (Date.now() - lastSaveTimeRef.current) < SAVE_COOLDOWN) return;
 
     try {
       const res = await fetch('/api/structure');
@@ -61,13 +100,20 @@ export default function Home() {
       const data = await res.json();
 
       if (data.structure) {
-        // Only update if we don't have unsaved changes (double-check)
-        if (!unsavedRef.current) {
-          setStructure(data.structure);
+        const serverTime = data.lastModified ? new Date(data.lastModified).getTime() : 0;
+
+        if (silent && serverTimestampRef.current && serverTime <= serverTimestampRef.current) {
+          return;
         }
+
+        if (!unsavedRef.current) {
+          // Sort on load
+          setStructure(sortStructure(JSON.parse(JSON.stringify(data.structure))));
+          serverTimestampRef.current = serverTime;
+        }
+
         setLastSaved(data.lastModified ? new Date(data.lastModified) : null);
       } else {
-        // Only clear structure if we don't have unsaved changes
         if (!unsavedRef.current) {
           setStructure(null);
         }
@@ -80,22 +126,27 @@ export default function Home() {
     }
   }, []);
 
-  // Save structure to server
   const saveStructure = useCallback(async (data) => {
     const toSave = data || structureRef.current;
     if (!toSave) return;
-
-    // Prevent concurrent saves
     if (savingRef.current) return;
     savingRef.current = true;
+
+    // Sort before saving
+    const sorted = sortStructure(JSON.parse(JSON.stringify(toSave)));
 
     try {
       const res = await fetch('/api/structure', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ structure: toSave }),
+        body: JSON.stringify({ structure: sorted }),
       });
+
       if (res.ok) {
+        const now = Date.now();
+        lastSaveTimeRef.current = now;
+        serverTimestampRef.current = now;
+        setStructure(sorted);
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('Changes saved', 'success');
@@ -110,13 +161,10 @@ export default function Home() {
     }
   }, [addToast]);
 
-  // Initial load
   useEffect(() => {
     loadStructure();
   }, [loadStructure]);
 
-  // Polling for real-time collaboration (every 10 seconds)
-  // Only fetches when there are NO unsaved local changes
   useEffect(() => {
     pollRef.current = setInterval(() => {
       loadStructure(true);
@@ -124,7 +172,6 @@ export default function Home() {
     return () => clearInterval(pollRef.current);
   }, [loadStructure]);
 
-  // Auto-save every 5 minutes (only if there are unsaved changes)
   useEffect(() => {
     autoSaveRef.current = setInterval(() => {
       if (unsavedRef.current && structureRef.current) {
@@ -134,15 +181,15 @@ export default function Home() {
     return () => clearInterval(autoSaveRef.current);
   }, [saveStructure]);
 
-  // Handle structure updates from tree operations
+  // Handle structure updates — sort after every change
   const handleStructureChange = useCallback((newStructure) => {
-    if (!newStructure) return; // Prevent accidental null/undefined
-    setStructure(newStructure);
+    if (!newStructure) return;
+    const sorted = sortStructure(JSON.parse(JSON.stringify(newStructure)));
+    setStructure(sorted);
     setUnsavedChanges(true);
     setIssues([]);
   }, []);
 
-  // Handle ZIP upload
   const handleUpload = useCallback(async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -169,7 +216,12 @@ export default function Home() {
       }
 
       if (data.structure) {
-        setStructure(data.structure);
+        // Sort after upload
+        const sorted = sortStructure(JSON.parse(JSON.stringify(data.structure)));
+        setStructure(sorted);
+        const now = Date.now();
+        lastSaveTimeRef.current = now;
+        serverTimestampRef.current = now;
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('ZIP uploaded and parsed successfully', 'success');
@@ -184,9 +236,7 @@ export default function Home() {
     }
   }, [addToast]);
 
-  // Export as ZIP
   const handleExport = useCallback(async () => {
-    // Use the current local structure (even if unsaved)
     const toExport = structureRef.current;
     if (!toExport) return;
 
@@ -210,7 +260,6 @@ export default function Home() {
     }
   }, [addToast]);
 
-  // Reset / upload new
   const handleReset = useCallback(async () => {
     if (!confirm('Are you sure you want to clear the current structure? This cannot be undone.')) return;
     try {
@@ -218,13 +267,14 @@ export default function Home() {
       setStructure(null);
       setUnsavedChanges(false);
       setIssues([]);
+      lastSaveTimeRef.current = Date.now();
+      serverTimestampRef.current = null;
       addToast('Structure cleared', 'info');
     } catch (err) {
       addToast('Failed to clear structure', 'error');
     }
   }, [addToast]);
 
-  // Scan handler
   const handleScan = useCallback(() => {
     if (!structure) return;
     setScanning(true);
@@ -239,7 +289,6 @@ export default function Home() {
     }
   }, [structure, addToast]);
 
-  // Fix All handler
   const handleFixAll = useCallback(() => {
     if (!structure || issues.length === 0) return;
     const fixable = issues.filter(i => i.suggestion);
@@ -251,27 +300,28 @@ export default function Home() {
 
     let newStructure = JSON.parse(JSON.stringify(structure));
 
-    // Apply fixes deepest-path-first to avoid index shifting
     const sorted = [...fixable].sort((a, b) => b.path.length - a.path.length);
 
     for (const issue of sorted) {
       let node = newStructure;
+      let valid = true;
       for (const idx of issue.path) {
-        if (!node.children || !node.children[idx]) break;
+        if (!node.children || !node.children[idx]) { valid = false; break; }
         node = node.children[idx];
       }
-      if (node) {
+      if (valid && node) {
         node.name = issue.suggestion;
       }
     }
 
+    // Sort after fixing
+    sortStructure(newStructure);
     setStructure(newStructure);
     setUnsavedChanges(true);
     setIssues([]);
     addToast(`Applied ${fixable.length} fix${fixable.length > 1 ? 'es' : ''}`, 'success');
   }, [structure, issues, addToast]);
 
-  // Fix single issue
   const handleFixSingle = useCallback((issue) => {
     if (!issue.suggestion || !structure) return;
     let newStructure = JSON.parse(JSON.stringify(structure));
@@ -283,6 +333,8 @@ export default function Home() {
     if (node) {
       node.name = issue.suggestion;
     }
+    // Sort after fixing
+    sortStructure(newStructure);
     setStructure(newStructure);
     setUnsavedChanges(true);
     setIssues(prev => prev.filter(i => i.id !== issue.id));
