@@ -29,7 +29,7 @@ function naturalCompare(a, b) {
   return ax.length - bx.length;
 }
 
-// Recursively sort all children
+// Recursively sort all children: folders first, then natural/numerical order
 function sortStructure(node) {
   if (!node || !node.children) return node;
 
@@ -45,6 +45,29 @@ function sortStructure(node) {
   });
 
   return node;
+}
+
+// Recursively remove .gitkeep files from the structure
+function removeGitkeep(node) {
+  if (!node || !node.children) return node;
+
+  node.children = node.children.filter(child => {
+    if (child.type === 'file' && child.name === '.gitkeep') return false;
+    return true;
+  });
+
+  node.children.forEach(child => {
+    if (child.type === 'folder') {
+      removeGitkeep(child);
+    }
+  });
+
+  return node;
+}
+
+// Helper: clean structure (remove .gitkeep then sort)
+function cleanStructure(data) {
+  return sortStructure(removeGitkeep(JSON.parse(JSON.stringify(data))));
 }
 
 export default function Home() {
@@ -105,7 +128,7 @@ export default function Home() {
         }
 
         if (!unsavedRef.current) {
-          setStructure(sortStructure(JSON.parse(JSON.stringify(data.structure))));
+          setStructure(cleanStructure(data.structure));
           serverTimestampRef.current = serverTime;
         }
 
@@ -129,7 +152,7 @@ export default function Home() {
     if (savingRef.current) return;
     savingRef.current = true;
 
-    const sorted = sortStructure(JSON.parse(JSON.stringify(toSave)));
+    const sorted = cleanStructure(toSave);
 
     try {
       const res = await fetch('/api/structure', {
@@ -179,7 +202,7 @@ export default function Home() {
 
   const handleStructureChange = useCallback((newStructure) => {
     if (!newStructure) return;
-    const sorted = sortStructure(JSON.parse(JSON.stringify(newStructure)));
+    const sorted = cleanStructure(newStructure);
     setStructure(sorted);
     setUnsavedChanges(true);
     setIssues([]);
@@ -211,7 +234,7 @@ export default function Home() {
       }
 
       if (data.structure) {
-        const sorted = sortStructure(JSON.parse(JSON.stringify(data.structure)));
+        const sorted = cleanStructure(data.structure);
         setStructure(sorted);
         const now = Date.now();
         lastSaveTimeRef.current = now;
@@ -308,8 +331,8 @@ export default function Home() {
       }
     }
 
-    sortStructure(newStructure);
-    setStructure(newStructure);
+    const cleaned = cleanStructure(newStructure);
+    setStructure(cleaned);
     setUnsavedChanges(true);
     setIssues([]);
     addToast(`Applied ${fixable.length} fix${fixable.length > 1 ? 'es' : ''}`, 'success');
@@ -326,8 +349,8 @@ export default function Home() {
     if (node) {
       node.name = issue.suggestion;
     }
-    sortStructure(newStructure);
-    setStructure(newStructure);
+    const cleaned = cleanStructure(newStructure);
+    setStructure(cleaned);
     setUnsavedChanges(true);
     setIssues(prev => prev.filter(i => i.id !== issue.id));
     addToast(`Fixed: "${issue.original}" → "${issue.suggestion}"`, 'success');
@@ -349,6 +372,21 @@ export default function Home() {
       addToast('Screenshot failed: ' + err.message, 'error');
     }
   }, [addToast]);
+
+  // Remove .gitkeep handler
+  const handleRemoveGitkeep = useCallback(() => {
+    if (!structure) return;
+    const cleaned = cleanStructure(structure);
+    const before = JSON.stringify(structure);
+    const after = JSON.stringify(cleaned);
+    if (before === after) {
+      addToast('No .gitkeep files found', 'info');
+      return;
+    }
+    setStructure(cleaned);
+    setUnsavedChanges(true);
+    addToast('Removed all .gitkeep files', 'success');
+  }, [structure, addToast]);
 
   if (loading) {
     return (
@@ -430,6 +468,7 @@ export default function Home() {
               issueCount={issues.length}
               onFixAll={handleFixAll}
               onScreenshot={handleScreenshot}
+              onRemoveGitkeep={handleRemoveGitkeep}
             />
 
             {/* Issues Panel */}
