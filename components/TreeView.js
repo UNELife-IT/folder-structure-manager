@@ -4,14 +4,12 @@ import { useState, useCallback } from 'react';
 import TreeNode from './TreeNode';
 import ContextMenu from './ContextMenu';
 
-export default function TreeView({ structure, onChange, searchTerm, addToast }) {
+export default function TreeView({ structure, onChange, searchTerm, addToast, expandAll, issues }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [dragState, setDragState] = useState({ dragging: null, overPath: null });
 
-  // Deep clone helper
   const clone = (obj) => JSON.parse(JSON.stringify(obj));
 
-  // Get node at path
   const getNode = (root, path) => {
     let node = root;
     for (const idx of path) {
@@ -20,7 +18,6 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     return node;
   };
 
-  // Set node at path
   const setNode = (root, path, value) => {
     const newRoot = clone(root);
     if (path.length === 0) return value;
@@ -32,7 +29,6 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     return newRoot;
   };
 
-  // Remove node at path
   const removeNode = (root, path) => {
     const newRoot = clone(root);
     let parent = newRoot;
@@ -43,7 +39,6 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     return newRoot;
   };
 
-  // Add child to node at path
   const addChild = (root, path, child) => {
     const newRoot = clone(root);
     let parent = newRoot;
@@ -55,10 +50,8 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     return newRoot;
   };
 
-  // Generate unique ID
   const genId = () => Math.random().toString(36).substr(2, 9);
 
-  // Handle tree actions
   const handleAction = useCallback((action, path, extra) => {
     if (action === 'contextMenu') {
       const node = path.length === 0 ? structure : getNode(structure, path);
@@ -77,7 +70,6 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     }
   }, [structure, onChange, addToast]);
 
-  // Handle context menu actions
   const handleContextAction = useCallback((action) => {
     if (!contextMenu) return;
     const { path } = contextMenu;
@@ -132,7 +124,6 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     }
   }, [contextMenu, structure, onChange, addToast]);
 
-  // Drag and drop handlers
   const handleDragStart = useCallback((path) => {
     setDragState(prev => ({ ...prev, dragging: path }));
   }, []);
@@ -145,13 +136,11 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     const { dragging } = dragState;
     if (!dragging) return;
 
-    // Don't drop on self
     if (dragging.join('/') === targetPath.join('/')) {
       setDragState({ dragging: null, overPath: null });
       return;
     }
 
-    // Don't drop parent into child
     if (targetPath.join('/').startsWith(dragging.join('/') + '/')) {
       addToast('Cannot move a folder into its own child', 'error');
       setDragState({ dragging: null, overPath: null });
@@ -161,12 +150,10 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
     const dragNode = clone(getNode(structure, dragging));
     let newStructure = removeNode(structure, dragging);
 
-    // Adjust target path if needed after removal
     const targetNode = getNode(newStructure, targetPath);
     if (targetNode.type === 'folder') {
       newStructure = addChild(newStructure, targetPath, dragNode);
     } else {
-      // Drop next to the file (into parent)
       const parentPath = targetPath.slice(0, -1);
       newStructure = addChild(newStructure, parentPath.length ? parentPath : [], dragNode);
     }
@@ -237,6 +224,8 @@ export default function TreeView({ structure, onChange, searchTerm, addToast }) 
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          expandAll={expandAll}
+          issues={issues}
         />
       ))}
 
