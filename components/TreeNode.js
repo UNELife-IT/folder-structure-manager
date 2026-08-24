@@ -14,7 +14,6 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
   const matchesSearch = searchTerm && node.name.toLowerCase().includes(searchTerm.toLowerCase());
   const childMatchesSearch = searchTerm && isFolder && hasDescendantMatch(node, searchTerm);
 
-  // Check if this node has issues
   const pathStr = path.join('/');
   const nodeIssues = issues ? issues.filter(i => i.path.join('/') === pathStr) : [];
   const hasIssues = nodeIssues.length > 0;
@@ -23,13 +22,11 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
       : nodeIssues.some(i => i.severity === 'warning') ? 'warning' : 'info')
     : null;
 
-  // Handle expandAll prop
   useEffect(() => {
     if (expandAll === true) setLocalExpanded(true);
     if (expandAll === false) setLocalExpanded(false);
   }, [expandAll]);
 
-  // Determine expanded state
   const isExpanded = searchTerm
     ? (matchesSearch || childMatchesSearch)
     : localExpanded;
@@ -96,6 +93,16 @@ export default function TreeNode({ node, path, depth, onAction, searchTerm, drag
         onContextMenu={handleContextMenu}
         onDoubleClick={(e) => { e.stopPropagation(); startEditing(); }}
         onClick={() => isFolder && setLocalExpanded(!localExpanded)}
+        // Data attributes for screenshot capture
+        data-tree-node="true"
+        data-depth={depth}
+        data-name={node.name}
+        data-type={node.type}
+        data-icon={icon}
+        data-children={hasChildren ? node.children.length : ''}
+        data-expanded={isExpanded}
+        data-has-issue={hasIssues}
+        data-issue-severity={worstSeverity || ''}
         style={{
           display: 'flex', alignItems: 'center', gap: '6px',
           padding: '5px 10px',

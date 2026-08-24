@@ -3,7 +3,7 @@
 export default function Toolbar({
   onSave, onExport, onReset, searchTerm, onSearchChange,
   unsavedChanges, onExpandAll, onCollapseAll, onScan, scanning,
-  issueCount, onFixAll
+  issueCount, onFixAll, onScreenshot
 }) {
   const btnStyle = (color) => ({
     padding: '8px 16px',
@@ -40,6 +40,9 @@ export default function Toolbar({
       </button>
       <button onClick={onExport} style={btnStyle()}>
         📥 Export ZIP
+      </button>
+      <button onClick={onScreenshot} style={btnStyle()}>
+        📸 Screenshot
       </button>
       <button onClick={onReset} style={btnStyle()}>
         🗑️ Clear

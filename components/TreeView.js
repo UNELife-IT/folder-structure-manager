@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import TreeNode from './TreeNode';
 import ContextMenu from './ContextMenu';
 
-export default function TreeView({ structure, onChange, searchTerm, addToast, expandAll, issues }) {
+export default function TreeView({ structure, onChange, searchTerm, addToast, expandAll, issues, treeRef }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [dragState, setDragState] = useState({ dragging: null, overPath: null });
+  const internalRef = useRef(null);
+
+  // Use external ref if provided, otherwise internal
+  const containerRef = treeRef || internalRef;
 
   const clone = (obj) => JSON.parse(JSON.stringify(obj));
 
@@ -167,6 +171,8 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
 
   return (
     <div
+      ref={containerRef}
+      data-tree-container="true"
       style={{ minHeight: '100%' }}
       onDragEnd={() => setDragState({ dragging: null, overPath: null })}
     >
@@ -184,6 +190,15 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
           e.preventDefault();
           handleDrop([]);
         }}
+        data-tree-node="true"
+        data-depth="0"
+        data-name={structure.name}
+        data-type="folder"
+        data-icon="📂"
+        data-children={structure.children?.length || 0}
+        data-expanded="true"
+        data-has-issue="false"
+        data-issue-severity=""
         style={{
           padding: '8px 10px',
           display: 'flex', alignItems: 'center', gap: '8px',
