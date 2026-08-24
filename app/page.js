@@ -13,46 +13,82 @@ export default function Home() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [toasts, setToasts] = useState([]);
-  const [expandAll, setExpandAll] = useState(null); // null = default, true = expand, false = collapse
-  const [issues, setIssues] = useState([]); // spell/naming issues
+  const [expandAll, setExpandAll] = useState(null);
+  const [issues, setIssues] = useState([]);
   const [scanning, setScanning] = useState(false);
   const autoSaveRef = useRef(null);
   const pollRef = useRef(null);
   const structureRef = useRef(structure);
+  const unsavedRef = useRef(unsavedChanges);
+  const savingRef = useRef(false);
 
+  // Keep refs in sync
   useEffect(() => {
     structureRef.current = structure;
   }, [structure]);
 
+  useEffect(() => {
+    unsavedRef.current = unsavedChanges;
+  }, [unsavedChanges]);
+
   const addToast = useCallback((message, type = 'info') => {
-    const id = Date.now();
+    const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3000);
   }, []);
 
+  // Load structure from server
   const loadStructure = useCallback(async (silent = false) => {
+    // CRITICAL: Don't overwrite local changes with server data
+    if (silent && unsavedRef.current) {
+      return;
+    }
+
+    // Don't poll while a save is in progress
+    if (silent && savingRef.current) {
+      return;
+    }
+
     try {
       const res = await fetch('/api/structure');
-      const data = await res.json();
-      if (data.structure) {
-        setStructure(data.structure);
-        setLastSaved(data.lastModified ? new Date(data.lastModified) : null);
+      if (!res.ok) {
         if (!silent) setLoading(false);
-      } else {
-        setStructure(null);
-        if (!silent) setLoading(false);
+        return;
       }
+
+      const data = await res.json();
+
+      if (data.structure) {
+        // Only update if we don't have unsaved changes (double-check)
+        if (!unsavedRef.current) {
+          setStructure(data.structure);
+        }
+        setLastSaved(data.lastModified ? new Date(data.lastModified) : null);
+      } else {
+        // Only clear structure if we don't have unsaved changes
+        if (!unsavedRef.current) {
+          setStructure(null);
+        }
+      }
+
+      if (!silent) setLoading(false);
     } catch (err) {
       console.error('Failed to load structure:', err);
       if (!silent) setLoading(false);
     }
   }, []);
 
+  // Save structure to server
   const saveStructure = useCallback(async (data) => {
     const toSave = data || structureRef.current;
     if (!toSave) return;
+
+    // Prevent concurrent saves
+    if (savingRef.current) return;
+    savingRef.current = true;
+
     try {
       const res = await fetch('/api/structure', {
         method: 'PUT',
@@ -63,17 +99,24 @@ export default function Home() {
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('Changes saved', 'success');
+      } else {
+        addToast('Failed to save changes', 'error');
       }
     } catch (err) {
       console.error('Failed to save:', err);
       addToast('Failed to save changes', 'error');
+    } finally {
+      savingRef.current = false;
     }
   }, [addToast]);
 
+  // Initial load
   useEffect(() => {
     loadStructure();
   }, [loadStructure]);
 
+  // Polling for real-time collaboration (every 10 seconds)
+  // Only fetches when there are NO unsaved local changes
   useEffect(() => {
     pollRef.current = setInterval(() => {
       loadStructure(true);
@@ -81,22 +124,25 @@ export default function Home() {
     return () => clearInterval(pollRef.current);
   }, [loadStructure]);
 
+  // Auto-save every 5 minutes (only if there are unsaved changes)
   useEffect(() => {
     autoSaveRef.current = setInterval(() => {
-      if (structureRef.current) {
+      if (unsavedRef.current && structureRef.current) {
         saveStructure();
       }
     }, 5 * 60 * 1000);
     return () => clearInterval(autoSaveRef.current);
   }, [saveStructure]);
 
+  // Handle structure updates from tree operations
   const handleStructureChange = useCallback((newStructure) => {
+    if (!newStructure) return; // Prevent accidental null/undefined
     setStructure(newStructure);
     setUnsavedChanges(true);
-    // Clear issues when structure changes since they may be stale
     setIssues([]);
   }, []);
 
+  // Handle ZIP upload
   const handleUpload = useCallback(async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -138,12 +184,17 @@ export default function Home() {
     }
   }, [addToast]);
 
+  // Export as ZIP
   const handleExport = useCallback(async () => {
+    // Use the current local structure (even if unsaved)
+    const toExport = structureRef.current;
+    if (!toExport) return;
+
     try {
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ structure }),
+        body: JSON.stringify({ structure: toExport }),
       });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -157,8 +208,9 @@ export default function Home() {
       console.error('Export failed:', err);
       addToast('Export failed', 'error');
     }
-  }, [structure, addToast]);
+  }, [addToast]);
 
+  // Reset / upload new
   const handleReset = useCallback(async () => {
     if (!confirm('Are you sure you want to clear the current structure? This cannot be undone.')) return;
     try {
@@ -205,6 +257,7 @@ export default function Home() {
     for (const issue of sorted) {
       let node = newStructure;
       for (const idx of issue.path) {
+        if (!node.children || !node.children[idx]) break;
         node = node.children[idx];
       }
       if (node) {
@@ -220,10 +273,11 @@ export default function Home() {
 
   // Fix single issue
   const handleFixSingle = useCallback((issue) => {
-    if (!issue.suggestion) return;
+    if (!issue.suggestion || !structure) return;
     let newStructure = JSON.parse(JSON.stringify(structure));
     let node = newStructure;
     for (const idx of issue.path) {
+      if (!node.children || !node.children[idx]) return;
       node = node.children[idx];
     }
     if (node) {
@@ -289,7 +343,7 @@ export default function Home() {
               padding: '2px 8px', background: 'rgba(245,158,11,0.1)',
               borderRadius: '4px'
             }}>
-              Unsaved changes
+              ● Unsaved changes
             </span>
           )}
         </div>
