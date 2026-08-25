@@ -1,7 +1,7 @@
 'use client';
 
 export default function Toolbar({
-  onSave, onExport, onReset, searchTerm, onSearchChange,
+  onSave, onExport, searchTerm, onSearchChange,
   unsavedChanges, onExpandAll, onCollapseAll, onScan, scanning,
   issueCount, onFixAll, onScreenshot, onRemoveGitkeep
 }) {
@@ -35,7 +35,7 @@ export default function Toolbar({
       flexWrap: 'wrap', flexShrink: 0
     }}>
       {/* File Operations */}
-      <button onClick={onSave} style={btnStyle(unsavedChanges ? 'rgba(139,92,246,0.2)' : undefined)}>
+      <button onClick={onSave} style={btnStyle(unsavedChanges ? 'rgba(34,197,94,0.2)' : undefined)}>
         💾 Save
       </button>
       <button onClick={onExport} style={btnStyle()}>
@@ -43,9 +43,6 @@ export default function Toolbar({
       </button>
       <button onClick={onScreenshot} style={btnStyle()}>
         📸 Screenshot
-      </button>
-      <button onClick={onReset} style={btnStyle()}>
-        🗑️ Clear
       </button>
 
       <div style={separatorStyle} />
@@ -65,8 +62,8 @@ export default function Toolbar({
         onClick={onScan}
         disabled={scanning}
         style={{
-          ...btnStyle('rgba(20,184,166,0.15)'),
-          border: '1px solid rgba(20,184,166,0.3)',
+          ...btnStyle('rgba(16,185,129,0.15)'),
+          border: '1px solid rgba(16,185,129,0.3)',
           color: 'var(--accent-teal)',
           opacity: scanning ? 0.6 : 1
         }}
@@ -78,8 +75,8 @@ export default function Toolbar({
         <button
           onClick={onFixAll}
           style={{
-            ...btnStyle('rgba(139,92,246,0.2)'),
-            border: '1px solid rgba(139,92,246,0.4)',
+            ...btnStyle('rgba(34,197,94,0.2)'),
+            border: '1px solid rgba(34,197,94,0.4)',
             color: '#fff',
             background: 'var(--gradient-primary)',
             fontWeight: 600
@@ -122,7 +119,7 @@ export default function Toolbar({
             width: '240px',
             outline: 'none'
           }}
-          onFocus={(e) => e.target.style.borderColor = 'var(--accent-purple)'}
+          onFocus={(e) => e.target.style.borderColor = 'var(--accent-green)'}
           onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'}
         />
       </div>
