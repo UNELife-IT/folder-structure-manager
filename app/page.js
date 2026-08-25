@@ -89,8 +89,9 @@ export default function Home() {
   const serverTimestampRef = useRef(null);
   const treeRef = useRef(null);
   const justSavedRef = useRef(false);
+  const editingRef = useRef(false);
   const SAVE_COOLDOWN = 15000;
-  const POST_SAVE_BLOCK = 5000; // Block polls for 5s after saving
+  const POST_SAVE_BLOCK = 5000;
 
   useEffect(() => {
     structureRef.current = structure;
@@ -98,6 +99,8 @@ export default function Home() {
 
   useEffect(() => {
     unsavedRef.current = unsavedChanges;
+    // Track when user is actively editing (has unsaved changes)
+    editingRef.current = unsavedChanges;
   }, [unsavedChanges]);
 
   const addToast = useCallback((message, type = 'info') => {
@@ -109,14 +112,14 @@ export default function Home() {
   }, []);
 
   const loadStructure = useCallback(async (silent = false) => {
-    // Block silent polls if we have unsaved changes, are saving, or just saved
+    // Block ALL silent polls when user has unsaved changes or is actively editing
     if (silent && unsavedRef.current) return;
+    if (silent && editingRef.current) return;
     if (silent && savingRef.current) return;
     if (silent && justSavedRef.current) return;
     if (silent && (Date.now() - lastSaveTimeRef.current) < SAVE_COOLDOWN) return;
 
     try {
-      // Add cache-busting to the API call itself
       const res = await fetch('/api/structure?_t=' + Date.now(), { cache: 'no-store' });
       if (!res.ok) {
         if (!silent) setLoading(false);
@@ -128,19 +131,19 @@ export default function Home() {
       if (data.structure) {
         const serverTime = data.lastModified ? new Date(data.lastModified).getTime() : 0;
 
-        // For silent polls, only update if server data is genuinely newer
         if (silent && serverTimestampRef.current && serverTime <= serverTimestampRef.current) {
           return;
         }
 
-        if (!unsavedRef.current) {
+        // CRITICAL: Never overwrite local state if user has unsaved changes
+        if (!unsavedRef.current && !editingRef.current) {
           setStructure(cleanStructure(data.structure));
           serverTimestampRef.current = serverTime;
         }
 
         setLastSaved(data.lastModified ? new Date(data.lastModified) : null);
       } else {
-        if (!unsavedRef.current) {
+        if (!unsavedRef.current && !editingRef.current) {
           setStructure(null);
         }
       }
@@ -159,6 +162,8 @@ export default function Home() {
     savingRef.current = true;
     justSavedRef.current = true;
 
+    // Snapshot the current structure BEFORE cleaning so we don't lose user's live state
+    const currentLiveStructure = structureRef.current;
     const sorted = cleanStructure(toSave);
 
     try {
@@ -169,16 +174,20 @@ export default function Home() {
       });
 
       if (res.ok) {
-        const result = await res.json();
         const now = Date.now();
         lastSaveTimeRef.current = now;
         serverTimestampRef.current = now;
-        setStructure(sorted);
+
+        // Only update displayed structure if user hasn't made MORE changes during save
+        if (JSON.stringify(structureRef.current) === JSON.stringify(currentLiveStructure)) {
+          setStructure(sorted);
+        }
+        // If they HAVE made changes during save, keep their current state — don't overwrite
+
         setLastSaved(new Date());
         setUnsavedChanges(false);
         addToast('Changes saved', 'success');
 
-        // Block polls for POST_SAVE_BLOCK ms to let Vercel Blob propagate
         setTimeout(() => {
           justSavedRef.current = false;
         }, POST_SAVE_BLOCK);
@@ -220,6 +229,7 @@ export default function Home() {
     const sorted = cleanStructure(newStructure);
     setStructure(sorted);
     setUnsavedChanges(true);
+    editingRef.current = true;
     setIssues([]);
   }, []);
 
@@ -289,21 +299,6 @@ export default function Home() {
     } catch (err) {
       console.error('Export failed:', err);
       addToast('Export failed', 'error');
-    }
-  }, [addToast]);
-
-  const handleReset = useCallback(async () => {
-    if (!confirm('Are you sure you want to clear the current structure? This cannot be undone.')) return;
-    try {
-      await fetch('/api/structure', { method: 'DELETE' });
-      setStructure(null);
-      setUnsavedChanges(false);
-      setIssues([]);
-      lastSaveTimeRef.current = Date.now();
-      serverTimestampRef.current = null;
-      addToast('Structure cleared', 'info');
-    } catch (err) {
-      addToast('Failed to clear structure', 'error');
     }
   }, [addToast]);
 
@@ -415,7 +410,7 @@ export default function Home() {
         }}>
           <div style={{
             width: 48, height: 48, border: '3px solid var(--border-color)',
-            borderTopColor: 'var(--accent-purple)', borderRadius: '50%',
+            borderTopColor: 'var(--accent-green)', borderRadius: '50%',
             animation: 'spin 0.8s linear infinite'
           }} />
           <p style={{ color: 'var(--text-secondary)' }}>Loading structure...</p>
@@ -472,7 +467,6 @@ export default function Home() {
             <Toolbar
               onSave={() => saveStructure()}
               onExport={handleExport}
-              onReset={handleReset}
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
               unsavedChanges={unsavedChanges}
@@ -547,8 +541,8 @@ export default function Home() {
                         onClick={() => handleFixSingle(issue)}
                         style={{
                           padding: '3px 10px',
-                          background: 'rgba(20,184,166,0.15)',
-                          border: '1px solid rgba(20,184,166,0.3)',
+                          background: 'rgba(16,185,129,0.15)',
+                          border: '1px solid rgba(16,185,129,0.3)',
                           borderRadius: '4px',
                           color: 'var(--accent-teal)',
                           fontSize: '0.75rem',
