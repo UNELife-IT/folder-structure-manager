@@ -1,40 +1,68 @@
-import JSZip from 'jszip';
 import { NextResponse } from 'next/server';
+import { pool, initPromise } from '../../../db/index.js';
 
-function addToZip(zip, node, parentPath = '') {
-  const currentPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+const STRUCTURE_ID = 'default';
 
-  if (node.type === 'folder') {
-    // Force directory entry by adding path with trailing slash
-    zip.file(currentPath + '/', '', { dir: true });
+export async function GET() {
+  try {
+    await initPromise;
 
-    if (node.children && node.children.length > 0) {
-      node.children.forEach(child => addToZip(zip, child, currentPath));
+    const result = await pool.query(
+      'SELECT structure, updated_at FROM folder_structures WHERE id = $1',
+      [STRUCTURE_ID]
+    );
+
+    if (result.rows.length === 0) {
+      return NextResponse.json({ structure: null });
     }
-  } else {
-    zip.file(currentPath, '');
+
+    const row = result.rows[0];
+    return NextResponse.json({
+      structure: row.structure,
+      lastModified: row.updated_at
+    });
+  } catch (err) {
+    console.error('GET structure error:', err);
+    return NextResponse.json({ structure: null });
   }
 }
 
-export async function POST(request) {
+export async function PUT(request) {
   try {
+    await initPromise;
+
     const { structure } = await request.json();
-    const zip = new JSZip();
 
-    if (structure.children) {
-      structure.children.forEach(child => addToZip(zip, child, structure.name));
-    }
+    await pool.query(
+      `INSERT INTO folder_structures (id, structure, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (id)
+       DO UPDATE SET structure = $2, updated_at = NOW()`,
+      [STRUCTURE_ID, JSON.stringify(structure)]
+    );
 
-    const content = await zip.generateAsync({ type: 'nodebuffer' });
-
-    return new NextResponse(content, {
-      headers: {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': 'attachment; filename="folder-structure.zip"'
-      }
+    return NextResponse.json({
+      success: true,
+      savedAt: new Date().toISOString()
     });
   } catch (err) {
-    console.error('Export error:', err);
-    return NextResponse.json({ error: 'Failed to export' }, { status: 500 });
+    console.error('PUT structure error:', err);
+    return NextResponse.json({ error: 'Failed to save' }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    await initPromise;
+
+    await pool.query(
+      'DELETE FROM folder_structures WHERE id = $1',
+      [STRUCTURE_ID]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('DELETE structure error:', err);
+    return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
 }
