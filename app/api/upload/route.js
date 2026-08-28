@@ -1,9 +1,8 @@
 import JSZip from 'jszip';
-import { put, list, del } from '@vercel/blob';
 import { NextResponse } from 'next/server';
+import { pool, initPromise } from '../../../db/index.js';
 
-const BLOB_PREFIX = 'folder-structure';
-const BLOB_FILENAME = `${BLOB_PREFIX}/structure.json`;
+const STRUCTURE_ID = 'default';
 
 function buildTree(paths) {
   const root = {
@@ -64,6 +63,8 @@ function buildTree(paths) {
 
 export async function POST(request) {
   try {
+    await initPromise;
+
     const formData = await request.formData();
     const file = formData.get('file');
 
@@ -71,9 +72,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Read file as ArrayBuffer directly — works reliably on Vercel
     const arrayBuffer = await file.arrayBuffer();
-    
+
     let zip;
     try {
       zip = await JSZip.loadAsync(arrayBuffer);
@@ -92,22 +92,14 @@ export async function POST(request) {
 
     const structure = buildTree(paths);
 
-    // Delete old blob
-    try {
-      const { blobs } = await list({ prefix: BLOB_PREFIX });
-      for (const blob of blobs) {
-        await del(blob.url);
-      }
-    } catch (e) {
-      console.error('Failed to clean old blobs:', e);
-    }
-
-    // Save to Vercel Blob
-    await put(BLOB_FILENAME, JSON.stringify(structure), {
-      access: 'public',
-      contentType: 'application/json',
-      addRandomSuffix: false,
-    });
+    // Save to PostgreSQL
+    await pool.query(
+      `INSERT INTO folder_structures (id, structure, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (id)
+       DO UPDATE SET structure = $2, updated_at = NOW()`,
+      [STRUCTURE_ID, JSON.stringify(structure)]
+    );
 
     return NextResponse.json({ structure });
   } catch (err) {
