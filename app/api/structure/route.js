@@ -1,30 +1,26 @@
-import { put, list, del } from '@vercel/blob';
 import { NextResponse } from 'next/server';
+import { pool, initPromise } from '../../../db/index.js';
 
-const BLOB_PREFIX = 'folder-structure';
-const BLOB_FILENAME = `${BLOB_PREFIX}/structure.json`;
-
-async function findBlob() {
-  const { blobs } = await list({ prefix: BLOB_PREFIX });
-  return blobs.find(b => b.pathname === BLOB_FILENAME);
-}
+const STRUCTURE_ID = 'default';
 
 // GET — Load current structure
 export async function GET() {
   try {
-    const blob = await findBlob();
-    if (!blob) {
+    await initPromise;
+
+    const result = await pool.query(
+      'SELECT structure, updated_at FROM folder_structures WHERE id = $1',
+      [STRUCTURE_ID]
+    );
+
+    if (result.rows.length === 0) {
       return NextResponse.json({ structure: null });
     }
 
-    // Add cache-busting to avoid stale CDN responses
-    const fetchUrl = blob.url + (blob.url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-    const res = await fetch(fetchUrl, { cache: 'no-store' });
-    const data = await res.json();
-
+    const row = result.rows[0];
     return NextResponse.json({
-      structure: data,
-      lastModified: blob.uploadedAt
+      structure: row.structure,
+      lastModified: row.updated_at
     });
   } catch (err) {
     console.error('GET structure error:', err);
@@ -35,19 +31,20 @@ export async function GET() {
 // PUT — Save structure
 export async function PUT(request) {
   try {
+    await initPromise;
+
     const { structure } = await request.json();
 
-    // Save new blob (overwrite by using addRandomSuffix: false)
-    // Put FIRST, then delete old — avoids the window where no blob exists
-    const blob = await put(BLOB_FILENAME, JSON.stringify(structure), {
-      access: 'public',
-      contentType: 'application/json',
-      addRandomSuffix: false,
-    });
+    await pool.query(
+      `INSERT INTO folder_structures (id, structure, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (id)
+       DO UPDATE SET structure = $2, updated_at = NOW()`,
+      [STRUCTURE_ID, JSON.stringify(structure)]
+    );
 
     return NextResponse.json({
       success: true,
-      url: blob.url,
       savedAt: new Date().toISOString()
     });
   } catch (err) {
@@ -59,10 +56,13 @@ export async function PUT(request) {
 // DELETE — Clear structure
 export async function DELETE() {
   try {
-    const existing = await findBlob();
-    if (existing) {
-      await del(existing.url);
-    }
+    await initPromise;
+
+    await pool.query(
+      'DELETE FROM folder_structures WHERE id = $1',
+      [STRUCTURE_ID]
+    );
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('DELETE structure error:', err);
