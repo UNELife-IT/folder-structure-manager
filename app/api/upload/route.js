@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { NextResponse } from 'next/server';
-import { pool, initPromise } from '../../../db/index.js';
+import { pool, ensureTable } from '../../../db/index.js';
 
 const STRUCTURE_ID = 'default';
 
@@ -63,7 +63,7 @@ function buildTree(paths) {
 
 export async function POST(request) {
   try {
-    await initPromise;
+    await ensureTable();
 
     const formData = await request.formData();
     const file = formData.get('file');

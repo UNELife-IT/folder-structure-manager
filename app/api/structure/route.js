@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { pool, initPromise } from '../../../db/index.js';
+import { pool, ensureTable } from '../../../db/index.js';
 
 const STRUCTURE_ID = 'default';
 
 // GET — Load current structure
 export async function GET() {
   try {
-    await initPromise;
+    await ensureTable();
 
     const result = await pool.query(
       'SELECT structure, updated_at FROM folder_structures WHERE id = $1',
@@ -24,14 +24,14 @@ export async function GET() {
     });
   } catch (err) {
     console.error('GET structure error:', err);
-    return NextResponse.json({ structure: null });
+    return NextResponse.json({ error: 'Failed to load' }, { status: 500 });
   }
 }
 
 // PUT — Save structure
 export async function PUT(request) {
   try {
-    await initPromise;
+    await ensureTable();
 
     const { structure } = await request.json();
 
@@ -56,7 +56,7 @@ export async function PUT(request) {
 // DELETE — Clear structure
 export async function DELETE() {
   try {
-    await initPromise;
+    await ensureTable();
 
     await pool.query(
       'DELETE FROM folder_structures WHERE id = $1',
