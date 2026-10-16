@@ -56,6 +56,22 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
 
   const genId = () => Math.random().toString(36).substr(2, 9);
 
+  // Leading number prefix, e.g. "05" in "05 Finance" or "1.2" in "1.2 Budget"
+  const NUMBER_PREFIX = /^\d+(?:\.\d+)*/;
+
+  // Reassign the leading numbers of same-type siblings so they follow their
+  // current order. Moving "5 X" above "4 Y" yields "4 X" and "5 Y".
+  // Without this, the name-based sort would undo the move.
+  const renumberSiblings = (children, type) => {
+    const numbered = children.filter(c => c.type === type && NUMBER_PREFIX.test(c.name));
+    const numbers = numbered
+      .map(c => c.name.match(NUMBER_PREFIX)[0])
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    numbered.forEach((c, i) => {
+      c.name = c.name.replace(NUMBER_PREFIX, numbers[i]);
+    });
+  };
+
   // Move a node up within its parent's children
   const handleMoveUp = useCallback((path) => {
     if (path.length === 0) return;
@@ -72,6 +88,7 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
     const temp = parent.children[index];
     parent.children[index] = parent.children[index - 1];
     parent.children[index - 1] = temp;
+    renumberSiblings(parent.children, temp.type);
 
     onChange(newRoot);
     addToast(`Moved "${temp.name}" up`, 'success');
@@ -94,6 +111,7 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
     const temp = parent.children[index];
     parent.children[index] = parent.children[index + 1];
     parent.children[index + 1] = temp;
+    renumberSiblings(parent.children, temp.type);
 
     onChange(newRoot);
     addToast(`Moved "${temp.name}" down`, 'success');
@@ -252,6 +270,12 @@ export default function TreeView({ structure, onChange, searchTerm, addToast, ex
       const parentPath = adjustedTarget.slice(0, -1);
       const insertIndex = adjustedTarget[adjustedTarget.length - 1] + 1;
       newStructure = insertAt(newStructure, parentPath, insertIndex, dragNode);
+    }
+
+    // Reordered within the same folder: renumber so the new order sticks
+    if (position !== 'inside' && dragging.slice(0, -1).join('/') === targetPath.slice(0, -1).join('/')) {
+      const parent = getNode(newStructure, dragging.slice(0, -1));
+      if (parent && parent.children) renumberSiblings(parent.children, dragNode.type);
     }
 
     onChange(newStructure);
